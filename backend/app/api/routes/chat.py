@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from redis import Redis
 
 from app.core.config import Settings, get_settings
@@ -7,7 +7,7 @@ from app.rag.pipeline import build_fallback_answer, build_prompt
 from app.repositories.redis_client import get_redis_client
 from app.repositories.redis_repository import RedisDocumentRepository
 from app.services.embeddings import EmbeddingService, get_embedding_service
-from app.services.ollama import OllamaClient
+from app.services.ollama import OllamaClient, OllamaServiceError
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -69,7 +69,14 @@ def chat(
             question=request.question,
             sources=sources,
         )
-        answer = ollama_client.generate(prompt)
+
+        try:
+            answer = ollama_client.generate(prompt)
+        except OllamaServiceError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=str(error),
+            ) from error
 
     return ChatResponse(
         answer=answer,

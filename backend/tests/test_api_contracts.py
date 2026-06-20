@@ -82,3 +82,29 @@ def test_retrieve_contract(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert isinstance(response.json(), list)
+
+
+def test_chat_returns_503_when_llm_service_is_unavailable(
+    client: TestClient,
+) -> None:
+    from app.api.routes.chat import get_ollama_client
+    from app.main import app
+    from app.services.ollama import OllamaServiceError
+
+    class BrokenOllamaClient:
+        def generate(self, prompt: str) -> str:
+            raise OllamaServiceError("LLM service is unavailable")
+
+    app.dependency_overrides[get_ollama_client] = lambda: BrokenOllamaClient()
+
+    response = client.post(
+        "/chat",
+        json={
+            "question": "What is Pipefy?",
+            "session_id": "test-session",
+            "top_k": 3,
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "LLM service is unavailable"
