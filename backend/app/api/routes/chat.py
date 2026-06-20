@@ -6,6 +6,7 @@ from app.models.schemas import ChatRequest, ChatResponse, SourceChunk
 from app.rag.pipeline import build_fallback_answer, build_prompt
 from app.repositories.redis_client import get_redis_client
 from app.repositories.redis_repository import RedisDocumentRepository
+from app.services.chat_history import ChatHistoryService
 from app.services.embeddings import EmbeddingService, get_embedding_service
 from app.services.ollama import OllamaClient, OllamaServiceError
 
@@ -24,6 +25,16 @@ def get_ollama_client(
     return OllamaClient(
         base_url=settings.ollama_base_url,
         model=settings.ollama_model,
+    )
+
+
+def get_chat_history_service(
+    settings: Settings = Depends(get_settings),
+    redis_client: Redis = Depends(get_redis_client),
+) -> ChatHistoryService:
+    return ChatHistoryService(
+        redis_client=redis_client,
+        max_messages=settings.max_history_messages,
     )
 
 
@@ -54,6 +65,7 @@ def chat(
     redis_client: Redis = Depends(get_redis_client),
     embedding_service: EmbeddingService = Depends(get_chat_embedding_service),
     ollama_client: OllamaClient = Depends(get_ollama_client),
+    history_service: ChatHistoryService = Depends(get_chat_history_service),
 ) -> ChatResponse:
     sources = retrieve_sources(
         request=request,
@@ -62,12 +74,15 @@ def chat(
         embedding_service=embedding_service,
     )
 
+    history = history_service.get_messages(request.session_id)
+
     if not sources:
         answer = build_fallback_answer()
     else:
         prompt = build_prompt(
             question=request.question,
             sources=sources,
+            history=history,
         )
 
         try:
@@ -77,6 +92,12 @@ def chat(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=str(error),
             ) from error
+
+    history_service.append_exchange(
+        session_id=request.session_id,
+        question=request.question,
+        answer=answer,
+    )
 
     return ChatResponse(
         answer=answer,
