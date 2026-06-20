@@ -1,9 +1,11 @@
 from datetime import datetime
+from typing import Any
 
 from redis import Redis
 
 from app.models.schemas import DocumentResponse, parse_datetime
-from app.services.chunking import TextChunk
+from app.services.embeddings import embedding_to_bytes
+from app.services.ingestion import EmbeddedChunk
 
 DOCUMENT_PREFIX = "document:"
 CHUNK_PREFIX = "doc:"
@@ -18,7 +20,7 @@ class RedisDocumentRepository:
         file_id: str,
         filename: str,
         uploaded_at: datetime,
-        chunks: list[TextChunk],
+        chunks: list[EmbeddedChunk],
     ) -> None:
         document_key = self._document_key(file_id)
 
@@ -42,6 +44,7 @@ class RedisDocumentRepository:
                     "chunk_index": chunk.chunk_index,
                     "content": chunk.content,
                     "uploaded_at": uploaded_at.isoformat(),
+                    "embedding": embedding_to_bytes(chunk.embedding),
                 },
             )
 
@@ -49,7 +52,7 @@ class RedisDocumentRepository:
         documents: list[DocumentResponse] = []
 
         for key in self.redis_client.scan_iter(f"{DOCUMENT_PREFIX}*"):
-            raw_document = self.redis_client.hgetall(key)
+            raw_document = self._decode_hash(self.redis_client.hgetall(key))
 
             if not raw_document:
                 continue
@@ -72,7 +75,6 @@ class RedisDocumentRepository:
         chunk_keys = list(self.redis_client.scan_iter(self._chunk_pattern(file_id)))
 
         keys_to_delete = [document_key, *chunk_keys]
-
         deleted_count = self.redis_client.delete(*keys_to_delete)
 
         return deleted_count > 0
@@ -85,3 +87,16 @@ class RedisDocumentRepository:
 
     def _chunk_pattern(self, file_id: str) -> str:
         return f"{CHUNK_PREFIX}{file_id}:chunk:*"
+
+    def _decode_hash(self, value: dict[Any, Any]) -> dict[str, str]:
+        decoded: dict[str, str] = {}
+
+        for key, item in value.items():
+            decoded_key = key.decode("utf-8") if isinstance(key, bytes) else str(key)
+
+            if isinstance(item, bytes):
+                decoded[decoded_key] = item.decode("utf-8")
+            else:
+                decoded[decoded_key] = str(item)
+
+        return decoded

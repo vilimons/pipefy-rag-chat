@@ -6,9 +6,16 @@ from app.models.schemas import UploadResponse, utc_now
 from app.repositories.redis_client import get_redis_client
 from app.repositories.redis_repository import RedisDocumentRepository
 from app.services.document_loader import EmptyDocumentError, UnsupportedFileTypeError
+from app.services.embeddings import EmbeddingService, get_embedding_service
 from app.services.ingestion import ingest_uploaded_document
 
 router = APIRouter(prefix="/upload", tags=["upload"])
+
+
+def get_upload_embedding_service(
+    settings: Settings = Depends(get_settings),
+) -> EmbeddingService:
+    return get_embedding_service(settings.embedding_model_name)
 
 
 @router.post("", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
@@ -16,12 +23,14 @@ async def upload_document(
     file: UploadFile = File(...),
     settings: Settings = Depends(get_settings),
     redis_client: Redis = Depends(get_redis_client),
+    embedding_service: EmbeddingService = Depends(get_upload_embedding_service),
 ) -> UploadResponse:
     try:
         ingested_document = await ingest_uploaded_document(
             file=file,
             chunk_size=settings.chunk_size,
             chunk_overlap=settings.chunk_overlap,
+            embedding_service=embedding_service,
         )
     except UnsupportedFileTypeError as error:
         raise HTTPException(
