@@ -12,7 +12,10 @@ settings = get_settings()
 app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
-    description="Full-stack RAG chat application with FastAPI, React, Redis and local open-source models.",
+    description=(
+        "Full-stack RAG chat application with FastAPI, React, Redis "
+        "and local open-source models."
+    ),
 )
 
 app.add_middleware(
