@@ -1,33 +1,38 @@
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
+from app.core.config import Settings, get_settings
 from app.models.schemas import UploadResponse
+from app.services.document_loader import EmptyDocumentError, UnsupportedFileTypeError
+from app.services.ingestion import ingest_uploaded_document
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
-ALLOWED_EXTENSIONS = {".pdf", ".txt"}
-
-
-def _get_file_extension(filename: str) -> str:
-    dot_index = filename.rfind(".")
-    if dot_index == -1:
-        return ""
-    return filename[dot_index:].lower()
-
 
 @router.post("", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
-async def upload_document(file: UploadFile = File(...)) -> UploadResponse:
-    extension = _get_file_extension(file.filename or "")
-
-    if extension not in ALLOWED_EXTENSIONS:
+async def upload_document(
+    file: UploadFile = File(...),
+    settings: Settings = Depends(get_settings),
+) -> UploadResponse:
+    try:
+        ingested_document = await ingest_uploaded_document(
+            file=file,
+            chunk_size=settings.chunk_size,
+            chunk_overlap=settings.chunk_overlap,
+        )
+    except UnsupportedFileTypeError as error:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unsupported file type. Only PDF and TXT files are allowed.",
-        )
+            detail=str(error),
+        ) from error
+    except EmptyDocumentError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(error),
+        ) from error
 
-    # Temporary placeholder. Real ingestion will be implemented next.
     return UploadResponse(
-        file_id="placeholder-file-id",
-        filename=file.filename or "unknown",
-        chunks_indexed=0,
-        status="accepted",
+        file_id=ingested_document.file_id,
+        filename=ingested_document.filename,
+        chunks_indexed=len(ingested_document.chunks),
+        status="processed",
     )

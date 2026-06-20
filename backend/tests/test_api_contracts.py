@@ -65,7 +65,8 @@ def test_upload_accepts_txt_contract(client: TestClient) -> None:
 
     payload = response.json()
 
-    assert payload["file_id"] == "placeholder-file-id"
+    assert isinstance(payload["file_id"], str)
+    assert payload["file_id"]
     assert payload["filename"] == "example.txt"
-    assert payload["chunks_indexed"] == 0
-    assert payload["status"] == "accepted"
+    assert payload["chunks_indexed"] == 1
+    assert payload["status"] == "processed"
