@@ -3,6 +3,7 @@ from collections.abc import Generator
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api.routes.chat import get_chat_embedding_service
 from app.api.routes.upload import get_upload_embedding_service
 from app.main import app
 
@@ -18,6 +19,9 @@ class FakeEmbeddingService:
 @pytest.fixture(autouse=True)
 def override_embedding_service() -> Generator[None, None, None]:
     app.dependency_overrides[get_upload_embedding_service] = (
+        lambda: FakeEmbeddingService()
+    )
+    app.dependency_overrides[get_chat_embedding_service] = (
         lambda: FakeEmbeddingService()
     )
     yield

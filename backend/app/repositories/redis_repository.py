@@ -2,8 +2,12 @@ from datetime import datetime
 from typing import Any
 
 from redis import Redis
+from redis.commands.search.field import NumericField, TextField, VectorField
+from redis.commands.search.indexDefinition import IndexDefinition, IndexType
+from redis.commands.search.query import Query
+from redis.exceptions import ResponseError
 
-from app.models.schemas import DocumentResponse, parse_datetime
+from app.models.schemas import DocumentResponse, SourceChunk, parse_datetime
 from app.services.embeddings import embedding_to_bytes
 from app.services.ingestion import EmbeddedChunk
 
@@ -12,8 +16,49 @@ CHUNK_PREFIX = "doc:"
 
 
 class RedisDocumentRepository:
-    def __init__(self, redis_client: Redis) -> None:
+    def __init__(
+        self,
+        redis_client: Redis,
+        index_name: str = "docs",
+        vector_dim: int = 384,
+    ) -> None:
         self.redis_client = redis_client
+        self.index_name = index_name
+        self.vector_dim = vector_dim
+
+    def ensure_vector_index(self) -> None:
+        try:
+            self.redis_client.ft(self.index_name).info()
+            return
+        except ResponseError:
+            pass
+
+        schema = (
+            TextField("file_id"),
+            TextField("source"),
+            NumericField("chunk_index"),
+            TextField("content"),
+            TextField("uploaded_at"),
+            VectorField(
+                "embedding",
+                "HNSW",
+                {
+                    "TYPE": "FLOAT32",
+                    "DIM": self.vector_dim,
+                    "DISTANCE_METRIC": "COSINE",
+                },
+            ),
+        )
+
+        definition = IndexDefinition(
+            prefix=[CHUNK_PREFIX],
+            index_type=IndexType.HASH,
+        )
+
+        self.redis_client.ft(self.index_name).create_index(
+            fields=schema,
+            definition=definition,
+        )
 
     def save_document(
         self,
@@ -22,6 +67,8 @@ class RedisDocumentRepository:
         uploaded_at: datetime,
         chunks: list[EmbeddedChunk],
     ) -> None:
+        self.ensure_vector_index()
+
         document_key = self._document_key(file_id)
 
         self.redis_client.hset(
@@ -67,7 +114,9 @@ class RedisDocumentRepository:
             )
 
         return sorted(
-            documents, key=lambda document: document.uploaded_at, reverse=True
+            documents,
+            key=lambda document: document.uploaded_at,
+            reverse=True,
         )
 
     def delete_document(self, file_id: str) -> bool:
@@ -78,6 +127,48 @@ class RedisDocumentRepository:
         deleted_count = self.redis_client.delete(*keys_to_delete)
 
         return deleted_count > 0
+
+    def search_similar_chunks(
+        self,
+        query_embedding: list[float],
+        top_k: int,
+    ) -> list[SourceChunk]:
+        self.ensure_vector_index()
+
+        query = (
+            Query(f"*=>[KNN {top_k} @embedding $query_vector AS score]")
+            .sort_by("score")
+            .return_fields(
+                "file_id",
+                "source",
+                "chunk_index",
+                "content",
+                "score",
+            )
+            .dialect(2)
+        )
+
+        result = self.redis_client.ft(self.index_name).search(
+            query,
+            query_params={
+                "query_vector": embedding_to_bytes(query_embedding),
+            },
+        )
+
+        sources: list[SourceChunk] = []
+
+        for document in result.docs:
+            sources.append(
+                SourceChunk(
+                    chunk=str(document.content),
+                    source=str(document.source),
+                    score=float(document.score),
+                    chunk_index=int(document.chunk_index),
+                    file_id=str(document.file_id),
+                )
+            )
+
+        return sources
 
     def _document_key(self, file_id: str) -> str:
         return f"{DOCUMENT_PREFIX}{file_id}"

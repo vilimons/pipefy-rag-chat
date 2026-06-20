@@ -68,3 +68,17 @@ def test_upload_accepts_txt_contract(client: TestClient) -> None:
     assert payload["filename"] == "example.txt"
     assert payload["chunks_indexed"] == 1
     assert payload["status"] == "indexed"
+
+
+def test_retrieve_contract(client: TestClient) -> None:
+    response = client.post(
+        "/chat/retrieve",
+        json={
+            "question": "What is Pipefy?",
+            "session_id": "test-session",
+            "top_k": 3,
+        },
+    )
+
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)

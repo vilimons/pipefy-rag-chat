@@ -43,7 +43,11 @@ async def upload_document(
             detail=str(error),
         ) from error
 
-    repository = RedisDocumentRepository(redis_client)
+    repository = RedisDocumentRepository(
+        redis_client=redis_client,
+        index_name=settings.redis_index_name,
+        vector_dim=settings.redis_vector_dim,
+    )
     repository.save_document(
         file_id=ingested_document.file_id,
         filename=ingested_document.filename,

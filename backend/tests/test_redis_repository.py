@@ -1,13 +1,33 @@
 from datetime import UTC, datetime
 from typing import Any
 
+from redis.exceptions import ResponseError
+
 from app.repositories.redis_repository import RedisDocumentRepository
 from app.services.ingestion import EmbeddedChunk
+
+
+class FakeSearchIndex:
+    def info(self) -> dict[str, str]:
+        raise ResponseError("unknown index name")
+
+    def create_index(self, fields: object, definition: object) -> None:
+        return None
+
+    def search(self, query: object, query_params: dict[str, bytes]):
+        class Result:
+            docs: list[object] = []
+
+        return Result()
 
 
 class FakeRedis:
     def __init__(self) -> None:
         self.storage: dict[str, dict[str, Any]] = {}
+        self.index = FakeSearchIndex()
+
+    def ft(self, index_name: str) -> FakeSearchIndex:
+        return self.index
 
     def hset(self, name: str, mapping: dict[str, object]) -> None:
         self.storage[name] = dict(mapping)
@@ -97,3 +117,15 @@ def test_repository_deletes_document_and_chunks() -> None:
 
     assert deleted is True
     assert repository.list_documents() == []
+
+
+def test_repository_search_similar_chunks_returns_empty_list_when_no_docs() -> None:
+    redis = FakeRedis()
+    repository = RedisDocumentRepository(redis)  # type: ignore[arg-type]
+
+    result = repository.search_similar_chunks(
+        query_embedding=[0.1] * 384,
+        top_k=5,
+    )
+
+    assert result == []
