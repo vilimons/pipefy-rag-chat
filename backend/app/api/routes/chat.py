@@ -3,10 +3,11 @@ from redis import Redis
 
 from app.core.config import Settings, get_settings
 from app.models.schemas import ChatRequest, ChatResponse, SourceChunk
-from app.rag.pipeline import build_answer_from_sources
+from app.rag.pipeline import build_fallback_answer, build_prompt
 from app.repositories.redis_client import get_redis_client
 from app.repositories.redis_repository import RedisDocumentRepository
 from app.services.embeddings import EmbeddingService, get_embedding_service
+from app.services.ollama import OllamaClient
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -15,6 +16,15 @@ def get_chat_embedding_service(
     settings: Settings = Depends(get_settings),
 ) -> EmbeddingService:
     return get_embedding_service(settings.embedding_model_name)
+
+
+def get_ollama_client(
+    settings: Settings = Depends(get_settings),
+) -> OllamaClient:
+    return OllamaClient(
+        base_url=settings.ollama_base_url,
+        model=settings.ollama_model,
+    )
 
 
 def retrieve_sources(
@@ -43,6 +53,7 @@ def chat(
     settings: Settings = Depends(get_settings),
     redis_client: Redis = Depends(get_redis_client),
     embedding_service: EmbeddingService = Depends(get_chat_embedding_service),
+    ollama_client: OllamaClient = Depends(get_ollama_client),
 ) -> ChatResponse:
     sources = retrieve_sources(
         request=request,
@@ -51,10 +62,14 @@ def chat(
         embedding_service=embedding_service,
     )
 
-    answer = build_answer_from_sources(
-        question=request.question,
-        sources=sources,
-    )
+    if not sources:
+        answer = build_fallback_answer()
+    else:
+        prompt = build_prompt(
+            question=request.question,
+            sources=sources,
+        )
+        answer = ollama_client.generate(prompt)
 
     return ChatResponse(
         answer=answer,
