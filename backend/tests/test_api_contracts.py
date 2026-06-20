@@ -108,3 +108,25 @@ def test_chat_returns_503_when_llm_service_is_unavailable(
 
     assert response.status_code == 503
     assert response.json()["detail"] == "LLM service is unavailable"
+
+
+def test_get_chat_history_contract(client: TestClient) -> None:
+    response = client.get("/chat/sessions/test-session/history")
+
+    assert response.status_code == 200
+
+    payload = response.json()
+
+    assert payload["session_id"] == "test-session"
+    assert isinstance(payload["messages"], list)
+
+
+def test_clear_chat_history_contract(client: TestClient) -> None:
+    response = client.delete("/chat/sessions/test-session/history")
+
+    assert response.status_code == 200
+
+    payload = response.json()
+
+    assert payload["session_id"] == "test-session"
+    assert isinstance(payload["deleted"], bool)

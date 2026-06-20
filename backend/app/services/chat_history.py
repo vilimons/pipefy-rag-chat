@@ -83,5 +83,10 @@ class ChatHistoryService:
             content=answer,
         )
 
+    def clear_history(self, session_id: str) -> bool:
+        deleted_count = self.redis_client.delete(self._session_key(session_id))
+
+        return deleted_count > 0
+
     def _session_key(self, session_id: str) -> str:
         return f"chat:session:{session_id}:messages"

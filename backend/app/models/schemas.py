@@ -51,6 +51,21 @@ class ChatResponse(BaseModel):
     session_id: str
 
 
+class ChatMessageResponse(BaseModel):
+    role: str
+    content: str
+
+
+class ChatHistoryResponse(BaseModel):
+    session_id: str
+    messages: list[ChatMessageResponse]
+
+
+class ClearChatHistoryResponse(BaseModel):
+    session_id: str
+    deleted: bool
+
+
 class ErrorResponse(BaseModel):
     detail: str | list[dict[str, Any]]
 

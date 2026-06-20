@@ -27,6 +27,13 @@ class FakeRedis:
 
         self.storage[name] = values[start : end + 1]
 
+    def delete(self, name: str) -> int:
+        if name not in self.storage:
+            return 0
+
+        del self.storage[name]
+        return 1
+
 
 def test_chat_history_appends_and_reads_messages() -> None:
     redis = FakeRedis()
@@ -99,3 +106,34 @@ def test_chat_history_appends_exchange() -> None:
     assert messages[0].content == "What is Pipefy?"
     assert messages[1].role == "assistant"
     assert messages[1].content == "Pipefy is a workflow platform."
+
+
+def test_chat_history_clear_history_returns_true_when_session_exists() -> None:
+    redis = FakeRedis()
+    history = ChatHistoryService(
+        redis_client=redis,  # type: ignore[arg-type]
+        max_messages=6,
+    )
+
+    history.append_message(
+        session_id="session-1",
+        role="user",
+        content="Hello",
+    )
+
+    deleted = history.clear_history("session-1")
+
+    assert deleted is True
+    assert history.get_messages("session-1") == []
+
+
+def test_chat_history_clear_history_returns_false_when_session_does_not_exist() -> None:
+    redis = FakeRedis()
+    history = ChatHistoryService(
+        redis_client=redis,  # type: ignore[arg-type]
+        max_messages=6,
+    )
+
+    deleted = history.clear_history("missing-session")
+
+    assert deleted is False

@@ -2,7 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from redis import Redis
 
 from app.core.config import Settings, get_settings
-from app.models.schemas import ChatRequest, ChatResponse, SourceChunk
+from app.models.schemas import (
+    ChatHistoryResponse,
+    ChatMessageResponse,
+    ChatRequest,
+    ChatResponse,
+    ClearChatHistoryResponse,
+    SourceChunk,
+)
 from app.rag.pipeline import build_fallback_answer, build_prompt
 from app.repositories.redis_client import get_redis_client
 from app.repositories.redis_repository import RedisDocumentRepository
@@ -118,4 +125,42 @@ def retrieve_relevant_chunks(
         settings=settings,
         redis_client=redis_client,
         embedding_service=embedding_service,
+    )
+
+
+@router.get(
+    "/sessions/{session_id}/history",
+    response_model=ChatHistoryResponse,
+)
+def get_chat_history(
+    session_id: str,
+    history_service: ChatHistoryService = Depends(get_chat_history_service),
+) -> ChatHistoryResponse:
+    messages = history_service.get_messages(session_id)
+
+    return ChatHistoryResponse(
+        session_id=session_id,
+        messages=[
+            ChatMessageResponse(
+                role=message.role,
+                content=message.content,
+            )
+            for message in messages
+        ],
+    )
+
+
+@router.delete(
+    "/sessions/{session_id}/history",
+    response_model=ClearChatHistoryResponse,
+)
+def clear_chat_history(
+    session_id: str,
+    history_service: ChatHistoryService = Depends(get_chat_history_service),
+) -> ClearChatHistoryResponse:
+    deleted = history_service.clear_history(session_id)
+
+    return ClearChatHistoryResponse(
+        session_id=session_id,
+        deleted=deleted,
     )

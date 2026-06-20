@@ -52,6 +52,13 @@ class FakeRedisForHistory:
 
         self.storage[name] = values[start : end + 1]
 
+    def delete(self, name: str) -> int:
+        if name not in self.storage:
+            return 0
+
+        del self.storage[name]
+        return 1
+
 
 @pytest.fixture
 def fake_history_service() -> ChatHistoryService:
