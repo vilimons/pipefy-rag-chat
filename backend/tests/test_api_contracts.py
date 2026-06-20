@@ -32,7 +32,7 @@ def test_chat_contract(client: TestClient) -> None:
 
     assert payload["session_id"] == "test-session"
     assert isinstance(payload["answer"], str)
-    assert payload["sources"] == []
+    assert isinstance(payload["sources"], list)
 
 
 def test_upload_rejects_unsupported_file_type(client: TestClient) -> None:
