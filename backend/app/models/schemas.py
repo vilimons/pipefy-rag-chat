@@ -57,3 +57,7 @@ class ErrorResponse(BaseModel):
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def parse_datetime(value: str) -> datetime:
+    return datetime.fromisoformat(value)
