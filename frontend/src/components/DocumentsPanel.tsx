@@ -1,5 +1,5 @@
-import type { DocumentItem } from "../types/api";
 import { deleteDocument } from "../api/client";
+import type { DocumentItem } from "../types/api";
 
 type DocumentsPanelProps = {
   documents: DocumentItem[];
@@ -13,11 +13,20 @@ export function DocumentsPanel({ documents, onChanged }: DocumentsPanelProps) {
   }
 
   return (
-    <section className="card">
-      <h2>Indexed documents</h2>
+    <section className="panel">
+      <div className="panel-heading">
+        <span className="panel-icon">◆</span>
+        <div>
+          <h2>Documentos indexados</h2>
+          <p>Base de conhecimento disponível para o chat.</p>
+        </div>
+      </div>
 
       {documents.length === 0 ? (
-        <p>No documents indexed yet.</p>
+        <div className="empty-state">
+          <strong>Nenhum documento enviado</strong>
+          <span>Envie um arquivo para começar a conversar.</span>
+        </div>
       ) : (
         <ul className="document-list">
           {documents.map((document) => (
@@ -26,16 +35,16 @@ export function DocumentsPanel({ documents, onChanged }: DocumentsPanelProps) {
                 <strong>{document.name}</strong>
                 <span>
                   {document.chunks} chunk(s) ·{" "}
-                  {new Date(document.uploaded_at).toLocaleString()}
+                  {new Date(document.uploaded_at).toLocaleString("pt-BR")}
                 </span>
               </div>
 
               <button
                 type="button"
-                className="danger"
+                className="danger compact"
                 onClick={() => handleDelete(document.file_id)}
               >
-                Delete
+                Remover
               </button>
             </li>
           ))}

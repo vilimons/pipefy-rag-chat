@@ -92,7 +92,7 @@ def test_rag_graph_returns_fallback_when_no_sources() -> None:
 
     assert response.session_id == "test-session"
     assert response.sources == []
-    assert "could not find relevant information" in response.answer
+    assert "Não encontrei informações relevantes" in response.answer
 
     history = history_service.get_messages("test-session")
 

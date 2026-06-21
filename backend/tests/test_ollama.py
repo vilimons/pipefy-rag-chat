@@ -15,9 +15,9 @@ def test_ollama_client_raises_service_error_for_unavailable_service() -> None:
 
 
 def test_ollama_service_error_message() -> None:
-    error = OllamaServiceError("LLM service is unavailable")
+    error = OllamaServiceError("Serviço de LLM indisponível.")
 
-    assert str(error) == "LLM service is unavailable"
+    assert str(error) == "Serviço de LLM indisponível."
 
 
 def test_ollama_client_exposes_stream_generate_method() -> None:

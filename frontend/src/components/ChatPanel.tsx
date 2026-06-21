@@ -49,7 +49,7 @@ export function ChatPanel() {
   async function loadHistory(sessionId: string) {
     try {
       setError("");
-      setStatus("Loading session history...");
+      setStatus("Carregando histórico da conversa...");
 
       const history = await getChatHistory(sessionId);
 
@@ -64,7 +64,7 @@ export function ChatPanel() {
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "Failed to load session history."
+          : "Não foi possível carregar o histórico."
       );
     } finally {
       setStatus("");
@@ -91,7 +91,7 @@ export function ChatPanel() {
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "Failed to clear session history."
+          : "Não foi possível limpar o histórico."
       );
     }
   }
@@ -108,7 +108,7 @@ export function ChatPanel() {
     const assistantMessageId = crypto.randomUUID();
 
     setError("");
-    setStatus("Retrieving relevant sources...");
+    setStatus("Recuperando fontes relevantes...");
     setIsLoading(true);
     setQuestion("");
 
@@ -118,7 +118,7 @@ export function ChatPanel() {
           ? {
               ...session,
               title:
-                session.title === "New chat"
+                session.title === "Nova conversa" || session.title === "New chat"
                   ? createTitle(trimmedQuestion)
                   : session.title
             }
@@ -150,7 +150,7 @@ export function ChatPanel() {
         },
         (streamEvent) => {
           if (streamEvent.event === "sources") {
-            setStatus("Generating answer...");
+            setStatus("Gerando resposta com Ollama...");
 
             setMessages((currentMessages) =>
               currentMessages.map((message) =>
@@ -193,7 +193,7 @@ export function ChatPanel() {
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "Failed to send message."
+          : "Não foi possível enviar a mensagem."
       );
     } finally {
       setIsLoading(false);
@@ -202,25 +202,20 @@ export function ChatPanel() {
   }
 
   return (
-    <section className="card chat-card">
-      <div className="chat-header">
-        <div>
-          <h2>RAG Chat</h2>
-          <p className="session">Session: {activeSessionId}</p>
-        </div>
+    <section className="chat-surface">
+      <div className="chat-sidebar">
+        <div className="chat-sidebar-heading">
+          <div>
+            <p className="eyebrow small">Sessões</p>
+            <h2>Conversas</h2>
+          </div>
 
-        <div className="chat-actions">
-          <button type="button" onClick={handleNewSession}>
-            New chat
-          </button>
-          <button type="button" className="secondary" onClick={handleClearSession}>
-            Clear
+          <button type="button" className="icon-button" onClick={handleNewSession}>
+            +
           </button>
         </div>
-      </div>
 
-      <div className="chat-layout">
-        <aside className="session-list" aria-label="Chat sessions">
+        <div className="session-list" aria-label="Conversas">
           {sessions.map((session) => (
             <button
               type="button"
@@ -233,56 +228,76 @@ export function ChatPanel() {
               onClick={() => setActiveSessionId(session.id)}
             >
               <strong>{session.title}</strong>
-              <span>{new Date(session.createdAt).toLocaleString()}</span>
+              <span>{new Date(session.createdAt).toLocaleString("pt-BR")}</span>
             </button>
           ))}
-        </aside>
+        </div>
 
-        <div className="chat-main">
-          <div className="messages">
-            {messages.length === 0 ? (
-              <p>Ask something about the indexed documents.</p>
-            ) : (
-              messages.map((message) => (
-                <article key={message.id} className={message.role}>
-                  <strong>
-                    {message.role === "user" ? "You" : "Assistant"}
-                  </strong>
-                  <p>{message.content || status || "Thinking..."}</p>
+        <button type="button" className="secondary-action" onClick={handleClearSession}>
+          Limpar conversa atual
+        </button>
+      </div>
 
-                  {message.sources && message.sources.length > 0 && (
-                    <details>
-                      <summary>Sources</summary>
-                      <ul>
-                        {message.sources.map((source) => (
-                          <li key={`${source.file_id}-${source.chunk_index}`}>
-                            <strong>{source.source}</strong> · score{" "}
-                            {source.score}
-                            <p>{source.chunk}</p>
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
-                </article>
-              ))
-            )}
+      <div className="chat-main">
+        <div className="chat-main-header">
+          <div>
+            <p className="eyebrow small">RAG Chat</p>
+            <h2>Assistente de documentos</h2>
+            <p className="session">Sessão: {activeSessionId}</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="chat-form">
-            <input
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              placeholder="Ask a question about your documents..."
-            />
-            <button type="submit" disabled={isLoading}>
-              {isLoading ? "Thinking..." : "Send"}
-            </button>
-          </form>
-
-          {status && <p className="status">{status}</p>}
-          {error && <p className="error">{error}</p>}
+          <div className="model-badge">
+            <span className="status-dot" />
+            llama3:8b
+          </div>
         </div>
+
+        <div className="messages">
+          {messages.length === 0 ? (
+            <div className="empty-chat">
+              <strong>Faça uma pergunta sobre seus documentos</strong>
+            </div>
+          ) : (
+            messages.map((message) => (
+              <article key={message.id} className={`message ${message.role}`}>
+                <div className="message-label">
+                  {message.role === "user" ? "Você" : "Assistente"}
+                </div>
+
+                <p>{message.content || status || "Pensando..."}</p>
+
+                {message.sources && message.sources.length > 0 && (
+                  <details className="sources-box">
+                    <summary>Fontes recuperadas</summary>
+                    <ul>
+                      {message.sources.map((source) => (
+                        <li key={`${source.file_id}-${source.chunk_index}`}>
+                          <strong>{source.source}</strong>
+                          <span>score {source.score.toFixed(4)}</span>
+                          <p>{source.chunk}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </article>
+            ))
+          )}
+        </div>
+
+        <form onSubmit={handleSubmit} className="chat-form">
+          <input
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            placeholder="Pergunte algo sobre os documentos indexados..."
+          />
+          <button type="submit" disabled={isLoading}>
+            {isLoading ? "Gerando..." : "Enviar"}
+          </button>
+        </form>
+
+        {status && <p className="status">{status}</p>}
+        {error && <p className="error">{error}</p>}
       </div>
     </section>
   );
@@ -291,7 +306,7 @@ export function ChatPanel() {
 function createSession(): ChatSession {
   return {
     id: crypto.randomUUID(),
-    title: "New chat",
+    title: "Nova conversa",
     createdAt: new Date().toISOString()
   };
 }
@@ -314,7 +329,10 @@ function loadSessions(fallbackSession: ChatSession): ChatSession[] {
       return [fallbackSession];
     }
 
-    return parsedSessions;
+    return parsedSessions.map((session) => ({
+      ...session,
+      title: session.title === "New chat" ? "Nova conversa" : session.title
+    }));
   } catch {
     return [fallbackSession];
   }

@@ -4,14 +4,14 @@ from app.services.chat_history import ChatMessage
 
 def build_fallback_answer() -> str:
     return (
-        "I could not find relevant information in the indexed documents "
-        "to answer this question."
+        "Não encontrei informações relevantes nos documentos indexados "
+        "para responder a essa pergunta."
     )
 
 
 def format_history(messages: list[ChatMessage]) -> str:
     if not messages:
-        return "No previous conversation."
+        return "Nenhuma conversa anterior."
 
     return "\n".join(f"{message.role}: {message.content}" for message in messages)
 
@@ -23,33 +23,35 @@ def build_prompt(
 ) -> str:
     context = "\n\n".join(
         (
-            f"Source: {source.source}\n"
-            f"Chunk index: {source.chunk_index}\n"
-            f"Content: {source.chunk}"
+            f"Fonte: {source.source}\n"
+            f"Índice do chunk: {source.chunk_index}\n"
+            f"Conteúdo: {source.chunk}"
         )
         for source in sources
     )
 
     conversation_history = format_history(history or [])
 
-    return f"""You are a RAG assistant for a technical document search system.
+    return f"""Você é um assistente RAG para consulta técnica de documentos.
 
-Answer the user's question using only the context below.
-If the context does not contain enough information, say that you do not know
-based on the indexed documents.
-Do not use external knowledge.
-Be concise and direct.
+Responda à pergunta do usuário usando somente o contexto abaixo.
+Se o contexto não tiver informação suficiente, diga que não sabe com base
+nos documentos indexados.
+Não use conhecimento externo.
+Responda em português brasileiro, a menos que o usuário peça explicitamente
+outro idioma.
+Seja direto e objetivo.
 
-Conversation history:
+Histórico da conversa:
 {conversation_history}
 
-Question:
+Pergunta:
 {question}
 
-Context:
+Contexto:
 {context}
 
-Answer:
+Resposta:
 """
 
 
@@ -61,7 +63,7 @@ def build_answer_from_sources(question: str, sources: list[SourceChunk]) -> str:
     context = "\n".join(context_lines)
 
     return (
-        "Based on the indexed documents, here is the most relevant context "
-        f"for your question: {question}\n\n"
+        "Com base nos documentos indexados, este é o contexto mais relevante "
+        f"para a sua pergunta: {question}\n\n"
         f"{context}"
     )

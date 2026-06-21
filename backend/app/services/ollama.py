@@ -31,7 +31,7 @@ class OllamaClient:
             )
             response.raise_for_status()
         except httpx.HTTPError as error:
-            raise OllamaServiceError("LLM service is unavailable") from error
+            raise OllamaServiceError("Serviço de LLM indisponível.") from error
 
         payload = response.json()
         return str(payload["response"]).strip()
@@ -66,4 +66,4 @@ class OllamaClient:
                     if payload.get("done") is True:
                         break
         except httpx.HTTPError as error:
-            raise OllamaServiceError("LLM service is unavailable") from error
+            raise OllamaServiceError("Serviço de LLM indisponível.") from error

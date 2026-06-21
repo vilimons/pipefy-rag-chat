@@ -17,7 +17,7 @@ type StreamEvent = {
 
 async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    let message = `Request failed with status ${response.status}`;
+    let message = `Requisição falhou com status ${response.status}`;
 
     try {
       const payload = await response.json();
@@ -122,11 +122,11 @@ export async function streamChatMessage(
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`);
+    throw new Error(`Requisição falhou com status ${response.status}`);
   }
 
   if (!response.body) {
-    throw new Error("Streaming response is not available.");
+    throw new Error("Resposta em streaming indisponível.");
   }
 
   const reader = response.body.getReader();

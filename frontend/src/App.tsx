@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { listDocuments } from "./api/client";
 import { ChatPanel } from "./components/ChatPanel";
@@ -9,6 +9,24 @@ import type { DocumentItem } from "./types/api";
 export function App() {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [error, setError] = useState("");
+  const [documentQuery, setDocumentQuery] = useState("");
+
+  const filteredDocuments = useMemo(() => {
+    const query = documentQuery.trim().toLowerCase();
+
+    if (!query) {
+      return documents;
+    }
+
+    return documents.filter((document) =>
+      document.name.toLowerCase().includes(query)
+    );
+  }, [documents, documentQuery]);
+
+  const totalChunks = documents.reduce(
+    (currentTotal, document) => currentTotal + document.chunks,
+    0
+  );
 
   async function refreshDocuments() {
     try {
@@ -19,7 +37,7 @@ export function App() {
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "Failed to load documents."
+          : "Não foi possível carregar os documentos."
       );
     }
   }
@@ -29,28 +47,79 @@ export function App() {
   }, []);
 
   return (
-    <main className="app">
-      <header className="hero">
-        <div>
-          <p className="eyebrow">Pipefy technical case</p>
-          <h1>RAG Chat</h1>
-          <p>
-            Upload documents, index them in Redis Vector Search, and ask
-            questions using a local Ollama LLM.
-          </p>
-        </div>
-      </header>
-
-      {error && <p className="error">{error}</p>}
-
-      <div className="grid">
-        <div className="sidebar">
-          <UploadPanel onUploaded={refreshDocuments} />
-          <DocumentsPanel documents={documents} onChanged={refreshDocuments} />
+    <main className="app-frame">
+      <aside className="app-sidebar">
+        <div className="brand">
+          <div className="brand-mark">✦</div>
+          <span>Pipefy RAG</span>
         </div>
 
-        <ChatPanel />
-      </div>
+        <section className="workspace-card">
+          <strong>Workspace local</strong>
+          <span>Ambiente de desenvolvimento</span>
+        </section>
+
+        <nav className="sidebar-nav" aria-label="Navegação principal">
+          <a
+            className="active"
+            href="https://smith.langchain.com/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span>◌</span>
+            LangSmith
+          </a>
+        </nav>
+      </aside>
+
+      <section className="app-main">
+        <header className="top-search">
+          <div className="search-box">
+            <span>⌕</span>
+            <input
+              value={documentQuery}
+              onChange={(event) => setDocumentQuery(event.target.value)}
+              placeholder="Buscar documentos indexados..."
+            />
+          </div>
+        </header>
+
+        <section className="page-heading">
+          <p>Case técnico Pipefy</p>
+          <h1>Assistente RAG para documentos</h1>
+          <span>
+            Envie documentos, recupere fontes relevantes e converse com uma
+            base de conhecimento vetorizada no Redis.
+          </span>
+        </section>
+
+        <section className="summary-strip two-columns" aria-label="Resumo da aplicação">
+          <div>
+            <strong>{documents.length}</strong>
+            <span>Documentos</span>
+          </div>
+          <div>
+            <strong>{totalChunks}</strong>
+            <span>Chunks indexados</span>
+          </div>
+        </section>
+
+        {error && <p className="error banner">{error}</p>}
+
+        <div className="workspace-grid">
+          <aside className="left-rail" id="documentos">
+            <UploadPanel onUploaded={refreshDocuments} />
+            <DocumentsPanel
+              documents={filteredDocuments}
+              onChanged={refreshDocuments}
+            />
+          </aside>
+
+          <section id="chat">
+            <ChatPanel />
+          </section>
+        </div>
+      </section>
     </main>
   );
 }

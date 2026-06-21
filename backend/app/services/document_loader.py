@@ -24,7 +24,7 @@ async def extract_text_from_upload(file: UploadFile) -> str:
 
     if extension not in SUPPORTED_FILE_EXTENSIONS:
         raise UnsupportedFileTypeError(
-            "Unsupported file type. Only PDF, TXT and DOCX files are supported."
+            "Tipo de arquivo não suportado. Envie apenas arquivos PDF, TXT ou DOCX."
         )
 
     content = await file.read()
@@ -38,13 +38,14 @@ async def extract_text_from_upload(file: UploadFile) -> str:
             text = _extract_text_from_docx(content)
     except (BadZipFile, PackageNotFoundError, PdfReadError) as error:
         raise EmptyDocumentError(
-            "Document could not be read. Please upload a valid PDF, TXT or DOCX file."
+            "Não foi possível ler o documento. Verifique se o arquivo não "
+            "está corrompido e foi salvo como PDF, TXT ou DOCX válido."
         ) from error
 
     normalized_text = normalize_text(text)
 
     if not normalized_text:
-        raise EmptyDocumentError("Document does not contain readable text.")
+        raise EmptyDocumentError("O documento não contém texto legível.")
 
     return normalized_text
 

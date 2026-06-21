@@ -49,7 +49,9 @@ def test_upload_rejects_unsupported_file_type(client: TestClient) -> None:
 
     assert response.status_code == 400
     assert response.json() == {
-        "detail": "Unsupported file type. Only PDF, TXT and DOCX files are supported.",
+        "detail": (
+            "Tipo de arquivo não suportado. " "Envie apenas arquivos PDF, TXT ou DOCX."
+        ),
     }
 
 
@@ -150,7 +152,7 @@ def test_upload_rejects_invalid_docx_content(client: TestClient) -> None:
     )
 
     assert response.status_code == 400
-    assert "Document could not be read" in response.json()["detail"]
+    assert "Não foi possível ler o documento" in response.json()["detail"]
 
 
 def test_stream_chat_contract(client: TestClient) -> None:
