@@ -1,7 +1,17 @@
-import type { ChatResponse, DocumentItem, UploadResponse } from "../types/api";
+import type {
+  ChatResponse,
+  DocumentItem,
+  SourceChunk,
+  UploadResponse
+} from "../types/api";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+
+type StreamEvent = {
+  event: string;
+  data: unknown;
+};
 
 async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -63,4 +73,99 @@ export async function sendChatMessage(params: {
   });
 
   return parseResponse<ChatResponse>(response);
+}
+
+export async function streamChatMessage(
+  params: {
+    question: string;
+    sessionId: string;
+    topK: number;
+  },
+  onEvent: (event: StreamEvent) => void
+): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/chat/stream`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream"
+    },
+    body: JSON.stringify({
+      question: params.question,
+      session_id: params.sessionId,
+      top_k: params.topK
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Request failed with status ${response.status}`);
+  }
+
+  if (!response.body) {
+    throw new Error("Streaming response is not available.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+
+    let eventBoundary = buffer.indexOf("\n\n");
+
+    while (eventBoundary !== -1) {
+      const rawEvent = buffer.slice(0, eventBoundary);
+      buffer = buffer.slice(eventBoundary + 2);
+
+      const parsedEvent = parseSseEvent(rawEvent);
+
+      if (parsedEvent) {
+        onEvent(parsedEvent);
+      }
+
+      eventBoundary = buffer.indexOf("\n\n");
+    }
+  }
+
+  if (buffer.trim()) {
+    const parsedEvent = parseSseEvent(buffer);
+
+    if (parsedEvent) {
+      onEvent(parsedEvent);
+    }
+  }
+}
+
+function parseSseEvent(rawEvent: string): StreamEvent | null {
+  const lines = rawEvent.split("\n");
+
+  let event = "message";
+  const dataLines: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("event:")) {
+      event = line.replace("event:", "").trim();
+    }
+
+    if (line.startsWith("data:")) {
+      dataLines.push(line.replace("data:", "").trim());
+    }
+  }
+
+  if (dataLines.length === 0) {
+    return null;
+  }
+
+  const rawData = dataLines.join("\n");
+
+  return {
+    event,
+    data: JSON.parse(rawData)
+  };
 }

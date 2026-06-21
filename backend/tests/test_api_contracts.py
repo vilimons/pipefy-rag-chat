@@ -151,3 +151,21 @@ def test_upload_rejects_invalid_docx_content(client: TestClient) -> None:
 
     assert response.status_code == 400
     assert "Document could not be read" in response.json()["detail"]
+
+
+def test_stream_chat_contract(client: TestClient) -> None:
+    response = client.post(
+        "/chat/stream",
+        json={
+            "question": "What is Pipefy?",
+            "session_id": "stream-test-session",
+            "top_k": 3,
+        },
+    )
+
+    assert response.status_code == 200
+    assert "text/event-stream" in response.headers["content-type"]
+    assert "event: metadata" in response.text
+    assert "event: sources" in response.text
+    assert "event: token" in response.text
+    assert "event: done" in response.text

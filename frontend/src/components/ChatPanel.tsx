@@ -1,9 +1,10 @@
 import { FormEvent, useState } from "react";
 
-import { sendChatMessage } from "../api/client";
+import { streamChatMessage } from "../api/client";
 import type { SourceChunk } from "../types/api";
 
 type ChatMessage = {
+  id: string;
   role: "user" | "assistant";
   content: string;
   sources?: SourceChunk[];
@@ -25,6 +26,8 @@ export function ChatPanel() {
       return;
     }
 
+    const assistantMessageId = crypto.randomUUID();
+
     setError("");
     setIsLoading(true);
     setQuestion("");
@@ -32,26 +35,57 @@ export function ChatPanel() {
     setMessages((currentMessages) => [
       ...currentMessages,
       {
+        id: crypto.randomUUID(),
         role: "user",
         content: trimmedQuestion
+      },
+      {
+        id: assistantMessageId,
+        role: "assistant",
+        content: "",
+        sources: []
       }
     ]);
 
     try {
-      const response = await sendChatMessage({
-        question: trimmedQuestion,
-        sessionId,
-        topK: 3
-      });
-
-      setMessages((currentMessages) => [
-        ...currentMessages,
+      await streamChatMessage(
         {
-          role: "assistant",
-          content: response.answer,
-          sources: response.sources
+          question: trimmedQuestion,
+          sessionId,
+          topK: 3
+        },
+        (streamEvent) => {
+          if (streamEvent.event === "sources") {
+            setMessages((currentMessages) =>
+              currentMessages.map((message) =>
+                message.id === assistantMessageId
+                  ? {
+                      ...message,
+                      sources: streamEvent.data as SourceChunk[]
+                    }
+                  : message
+              )
+            );
+          }
+
+          if (streamEvent.event === "token") {
+            setMessages((currentMessages) =>
+              currentMessages.map((message) =>
+                message.id === assistantMessageId
+                  ? {
+                      ...message,
+                      content: `${message.content}${String(streamEvent.data)}`
+                    }
+                  : message
+              )
+            );
+          }
+
+          if (streamEvent.event === "error") {
+            setError(String(streamEvent.data));
+          }
         }
-      ]);
+      );
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -72,10 +106,10 @@ export function ChatPanel() {
         {messages.length === 0 ? (
           <p>Ask something about the indexed documents.</p>
         ) : (
-          messages.map((message, index) => (
-            <article key={`${message.role}-${index}`} className={message.role}>
+          messages.map((message) => (
+            <article key={message.id} className={message.role}>
               <strong>{message.role === "user" ? "You" : "Assistant"}</strong>
-              <p>{message.content}</p>
+              <p>{message.content || (isLoading ? "Thinking..." : "")}</p>
 
               {message.sources && message.sources.length > 0 && (
                 <details>

@@ -18,3 +18,13 @@ def test_ollama_service_error_message() -> None:
     error = OllamaServiceError("LLM service is unavailable")
 
     assert str(error) == "LLM service is unavailable"
+
+
+def test_ollama_client_exposes_stream_generate_method() -> None:
+    client = OllamaClient(
+        base_url="http://unavailable-ollama",
+        model="llama3:8b",
+        timeout_seconds=0.001,
+    )
+
+    assert hasattr(client, "stream_generate")
