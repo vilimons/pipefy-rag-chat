@@ -40,16 +40,16 @@ def test_upload_rejects_unsupported_file_type(client: TestClient) -> None:
         "/upload",
         files={
             "file": (
-                "example.docx",
+                "example.csv",
                 b"fake content",
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "text/csv",
             )
         },
     )
 
     assert response.status_code == 400
     assert response.json() == {
-        "detail": "Unsupported file type. Only PDF and TXT files are allowed.",
+        "detail": "Unsupported file type. Only PDF, TXT and DOCX files are supported.",
     }
 
 
@@ -104,3 +104,50 @@ def test_clear_chat_history_contract(client: TestClient) -> None:
 
     assert payload["session_id"] == "test-session"
     assert isinstance(payload["deleted"], bool)
+
+
+def test_upload_accepts_docx_contract(client: TestClient) -> None:
+    from io import BytesIO
+
+    from docx import Document as DocxDocument
+
+    buffer = BytesIO()
+    document = DocxDocument()
+    document.add_paragraph("Pipefy helps teams manage workflows.")
+    document.save(buffer)
+    buffer.seek(0)
+
+    response = client.post(
+        "/upload",
+        files={
+            "file": (
+                "example.docx",
+                buffer.read(),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+
+    assert response.status_code == 201
+
+    payload = response.json()
+
+    assert payload["filename"] == "example.docx"
+    assert payload["chunks_indexed"] == 1
+    assert payload["status"] == "indexed"
+
+
+def test_upload_rejects_invalid_docx_content(client: TestClient) -> None:
+    response = client.post(
+        "/upload",
+        files={
+            "file": (
+                "invalid.docx",
+                b"fake content",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+
+    assert response.status_code == 400
+    assert "Document could not be read" in response.json()["detail"]

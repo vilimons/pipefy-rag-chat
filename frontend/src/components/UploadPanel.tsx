@@ -12,7 +12,7 @@ export function UploadPanel({ onUploaded }: UploadPanelProps) {
 
   async function handleUpload() {
     if (!file) {
-      setStatus("Select a TXT or PDF file first.");
+      setStatus("Select a TXT, PDF or DOCX file first.");
       return;
     }
 
@@ -33,11 +33,11 @@ export function UploadPanel({ onUploaded }: UploadPanelProps) {
   return (
     <section className="card">
       <h2>Upload document</h2>
-      <p>Upload a TXT or PDF file to index it in Redis Vector Search.</p>
+      <p>Upload a TXT, PDF or DOCX file to index it in Redis Vector Search.</p>
 
       <input
         type="file"
-        accept=".txt,.pdf"
+        accept=".txt,.pdf,.docx"
         onChange={(event) => setFile(event.target.files?.[0] ?? null)}
       />
 

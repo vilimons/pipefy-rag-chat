@@ -1,53 +1,69 @@
+from io import BytesIO
+
 import pytest
+from docx import Document as DocxDocument
 from fastapi import UploadFile
 
 from app.services.document_loader import (
     EmptyDocumentError,
     UnsupportedFileTypeError,
     extract_text_from_upload,
-    get_file_extension,
     normalize_text,
-    validate_supported_file,
 )
 
 
-def test_get_file_extension_returns_lowercase_extension() -> None:
-    assert get_file_extension("Report.PDF") == ".pdf"
-    assert get_file_extension("notes.TXT") == ".txt"
+def test_normalize_text_removes_blank_lines_and_extra_spaces() -> None:
+    text = " first line \n\n second line \n "
 
-
-def test_validate_supported_file_accepts_pdf_and_txt() -> None:
-    validate_supported_file("example.pdf")
-    validate_supported_file("example.txt")
-
-
-def test_validate_supported_file_rejects_other_extensions() -> None:
-    with pytest.raises(UnsupportedFileTypeError):
-        validate_supported_file("example.docx")
-
-
-def test_normalize_text_removes_empty_lines_and_extra_spaces() -> None:
-    text = "  hello  \n\n  world  \n"
-    assert normalize_text(text) == "hello\nworld"
+    assert normalize_text(text) == "first line\nsecond line"
 
 
 @pytest.mark.asyncio
 async def test_extract_text_from_txt_upload() -> None:
     file = UploadFile(
         filename="example.txt",
-        file=__import__("io").BytesIO(b" hello world \n\n from txt "),
+        file=BytesIO(b"hello world"),
     )
 
     text = await extract_text_from_upload(file)
 
-    assert text == "hello world\nfrom txt"
+    assert text == "hello world"
 
 
 @pytest.mark.asyncio
-async def test_extract_text_from_empty_txt_raises_error() -> None:
+async def test_extract_text_from_docx_upload() -> None:
+    buffer = BytesIO()
+    document = DocxDocument()
+    document.add_paragraph("Pipefy is a workflow management platform.")
+    document.save(buffer)
+    buffer.seek(0)
+
+    file = UploadFile(
+        filename="example.docx",
+        file=BytesIO(buffer.read()),
+    )
+
+    text = await extract_text_from_upload(file)
+
+    assert text == "Pipefy is a workflow management platform."
+
+
+@pytest.mark.asyncio
+async def test_extract_text_from_upload_rejects_unsupported_extension() -> None:
+    file = UploadFile(
+        filename="example.csv",
+        file=BytesIO(b"hello world"),
+    )
+
+    with pytest.raises(UnsupportedFileTypeError):
+        await extract_text_from_upload(file)
+
+
+@pytest.mark.asyncio
+async def test_extract_text_from_upload_rejects_empty_txt() -> None:
     file = UploadFile(
         filename="empty.txt",
-        file=__import__("io").BytesIO(b"   \n\n   "),
+        file=BytesIO(b"   \n\n"),
     )
 
     with pytest.raises(EmptyDocumentError):
