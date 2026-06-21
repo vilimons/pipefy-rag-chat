@@ -13,6 +13,17 @@ services:
       timeout: 3s
       retries: 5
 
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: /api
+    container_name: pipefy-rag-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      - api
+
   api:
     build:
       context: ./backend
