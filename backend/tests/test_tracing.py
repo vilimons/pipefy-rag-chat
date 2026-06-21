@@ -70,7 +70,7 @@ def test_tracer_propagates_function_error_when_disabled() -> None:
         raise AssertionError("Expected ValueError")
 
 
-def test_tracer_continues_when_create_run_returns_none() -> None:
+def test_tracer_updates_run_outputs_when_enabled() -> None:
     tracer = LangSmithTracer(
         TraceConfig(
             enabled=True,
@@ -81,20 +81,33 @@ def test_tracer_continues_when_create_run_returns_none() -> None:
     )
 
     class FakeClient:
-        def create_run(self, *args: object, **kwargs: object) -> None:
-            return None
+        def __init__(self) -> None:
+            self.created_run_id = None
+            self.updated_run_id = None
+            self.outputs = None
 
-    tracer.client = FakeClient()  # type: ignore[assignment]
+        def create_run(self, **kwargs: object) -> None:
+            self.created_run_id = kwargs["id"]
+
+        def update_run(self, run_id: object, **kwargs: object) -> None:
+            self.updated_run_id = run_id
+            self.outputs = kwargs.get("outputs")
+
+    fake_client = FakeClient()
+    tracer.client = fake_client  # type: ignore[assignment]
 
     result = tracer.trace(
         name="test",
         run_type="chain",
-        inputs={},
-        metadata={},
-        function=lambda: "ok",
+        inputs={"input": "value"},
+        metadata={"env": "test"},
+        function=lambda: {"answer": "ok"},
     )
 
-    assert result == "ok"
+    assert result == {"answer": "ok"}
+    assert fake_client.created_run_id == fake_client.updated_run_id
+    assert fake_client.outputs is not None
+    assert fake_client.outputs["output"] == {"answer": "ok"}
 
 
 def test_tracer_continues_when_create_run_fails() -> None:
@@ -108,7 +121,7 @@ def test_tracer_continues_when_create_run_fails() -> None:
     )
 
     class FakeClient:
-        def create_run(self, *args: object, **kwargs: object) -> None:
+        def create_run(self, **kwargs: object) -> None:
             raise RuntimeError("langsmith unavailable")
 
     tracer.client = FakeClient()  # type: ignore[assignment]

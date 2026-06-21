@@ -16,6 +16,7 @@ from app.repositories.redis_repository import RedisDocumentRepository
 from app.services.chat_history import ChatHistoryService
 from app.services.embeddings import EmbeddingService, get_embedding_service
 from app.services.ollama import OllamaClient, OllamaServiceError
+from app.services.tracing import LangSmithTracer, get_langsmith_tracer
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -73,12 +74,31 @@ def chat(
     embedding_service: EmbeddingService = Depends(get_chat_embedding_service),
     ollama_client: OllamaClient = Depends(get_ollama_client),
     history_service: ChatHistoryService = Depends(get_chat_history_service),
+    tracer: LangSmithTracer = Depends(get_langsmith_tracer),
 ) -> ChatResponse:
-    sources = retrieve_sources(
-        request=request,
-        settings=settings,
-        redis_client=redis_client,
-        embedding_service=embedding_service,
+    metadata = {
+        "session_id": request.session_id,
+        "top_k": request.top_k,
+        "llm_provider": "ollama",
+        "llm_model": settings.ollama_model,
+        "embedding_model": settings.embedding_model_name,
+        "environment": settings.app_env,
+    }
+
+    sources = tracer.trace(
+        name="redis_vector_retrieval",
+        run_type="retriever",
+        inputs={
+            "question": request.question,
+            "top_k": request.top_k,
+        },
+        metadata=metadata,
+        function=lambda: retrieve_sources(
+            request=request,
+            settings=settings,
+            redis_client=redis_client,
+            embedding_service=embedding_service,
+        ),
     )
 
     history = history_service.get_messages(request.session_id)
@@ -86,14 +106,36 @@ def chat(
     if not sources:
         answer = build_fallback_answer()
     else:
-        prompt = build_prompt(
-            question=request.question,
-            sources=sources,
-            history=history,
+        prompt = tracer.trace(
+            name="build_rag_prompt",
+            run_type="chain",
+            inputs={
+                "question": request.question,
+                "source_count": len(sources),
+                "history_count": len(history),
+            },
+            metadata=metadata,
+            function=lambda: build_prompt(
+                question=request.question,
+                sources=sources,
+                history=history,
+            ),
         )
 
         try:
-            answer = ollama_client.generate(prompt)
+            answer = tracer.trace(
+                name="ollama_generate",
+                run_type="llm",
+                inputs={
+                    "prompt": prompt,
+                    "model": settings.ollama_model,
+                },
+                metadata={
+                    **metadata,
+                    "source_count": len(sources),
+                },
+                function=lambda: ollama_client.generate(prompt),
+            )
         except OllamaServiceError as error:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
