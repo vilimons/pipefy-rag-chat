@@ -25,3 +25,18 @@ export type ChatResponse = {
   sources: SourceChunk[];
   session_id: string;
 };
+
+export type ChatHistoryMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type ChatHistoryResponse = {
+  session_id: string;
+  messages: ChatHistoryMessage[];
+};
+
+export type ClearChatHistoryResponse = {
+  session_id: string;
+  deleted: boolean;
+};

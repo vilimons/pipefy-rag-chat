@@ -1,5 +1,7 @@
 import type {
+  ChatHistoryResponse,
   ChatResponse,
+  ClearChatHistoryResponse,
   DocumentItem,
   SourceChunk,
   UploadResponse
@@ -73,6 +75,29 @@ export async function sendChatMessage(params: {
   });
 
   return parseResponse<ChatResponse>(response);
+}
+
+export async function getChatHistory(
+  sessionId: string
+): Promise<ChatHistoryResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/chat/sessions/${sessionId}/history`
+  );
+
+  return parseResponse<ChatHistoryResponse>(response);
+}
+
+export async function clearChatHistory(
+  sessionId: string
+): Promise<ClearChatHistoryResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/chat/sessions/${sessionId}/history`,
+    {
+      method: "DELETE"
+    }
+  );
+
+  return parseResponse<ClearChatHistoryResponse>(response);
 }
 
 export async function streamChatMessage(
