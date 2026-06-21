@@ -1,6 +1,8 @@
 services:
   redis:
     image: redis/redis-stack:latest
+    environment:
+      REDIS_ARGS: "--save 60 1000 --appendonly yes --appendfsync everysec"
     container_name: pipefy-rag-redis
     ports:
       - "6379:6379"
