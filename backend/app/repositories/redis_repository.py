@@ -181,7 +181,6 @@ class RedisDocumentRepository:
 
         query = (
             Query(f"*=>[KNN {candidate_k} @embedding $query_vector AS vector_score]")
-            .sort_by("vector_score")
             .return_fields(
                 "content",
                 "source",
