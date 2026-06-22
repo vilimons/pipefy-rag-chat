@@ -5,7 +5,7 @@ from typing import Any
 from unicodedata import category, normalize
 
 from redis import Redis
-from redis.commands.search.field import NumericField, TagField, TextField, VectorField
+from redis.commands.search.field import NumericField, TagField, VectorField
 from redis.commands.search.indexDefinition import IndexDefinition, IndexType
 from redis.commands.search.query import Query
 from redis.exceptions import ResponseError
@@ -38,11 +38,6 @@ class RedisDocumentRepository:
             pass
 
         schema = (
-            TagField("file_id"),
-            TextField("source"),
-            NumericField("chunk_index"),
-            TextField("content"),
-            TextField("uploaded_at"),
             VectorField(
                 "embedding",
                 "HNSW",
@@ -53,6 +48,8 @@ class RedisDocumentRepository:
                     "INITIAL_CAP": 1000,
                 },
             ),
+            TagField("file_id"),
+            NumericField("chunk_index"),
         )
 
         definition = IndexDefinition(
@@ -159,7 +156,7 @@ class RedisDocumentRepository:
 
         if self._is_collection_overview_question(question):
             overview_limit = min(
-                max(top_k, len(documents)),
+                max(top_k * 2, len(documents) * 2),
                 MAX_OVERVIEW_CHUNKS,
             )
 
@@ -261,6 +258,20 @@ class RedisDocumentRepository:
             "todos os arquivos",
             "o que tem nos documentos",
             "o que tem nos arquivos",
+            "informacoes sobre o documento",
+            "informacoes do documento",
+            "fale sobre o documento",
+            "me diga sobre o documento",
+            "resuma o documento",
+            "resumo do documento",
+            "do que se trata o documento",
+            "do que trata o documento",
+            "documento indexado",
+            "arquivo indexado",
+            "o que tem no documento",
+            "o que tem no arquivo",
+            "conteudo do documento",
+            "conteudo do arquivo",
             "documents",
             "files",
             "knowledge base",
