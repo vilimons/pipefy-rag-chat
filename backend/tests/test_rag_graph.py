@@ -47,6 +47,12 @@ class FakeRedis:
     def ft(self, index_name: str) -> FakeSearchIndex:
         return self.index
 
+    def hgetall(self, name: str) -> dict[str, object]:
+        return {}
+
+    def scan_iter(self, pattern: str):
+        return iter(())
+
     def lrange(self, name: str, start: int, end: int) -> list[str]:
         values = self.storage.get(name, [])
 

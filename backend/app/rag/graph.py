@@ -47,7 +47,8 @@ def retrieve_sources(
         vector_dim=settings.redis_vector_dim,
     )
 
-    return repository.search_similar_chunks(
+    return repository.search_relevant_chunks(
+        question=question,
         query_embedding=query_embedding,
         top_k=top_k,
     )

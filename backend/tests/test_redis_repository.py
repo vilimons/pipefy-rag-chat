@@ -3,6 +3,7 @@ from typing import Any
 
 from redis.exceptions import ResponseError
 
+from app.models.schemas import SourceChunk
 from app.repositories.redis_repository import RedisDocumentRepository
 from app.services.ingestion import EmbeddedChunk
 
@@ -129,3 +130,132 @@ def test_repository_search_similar_chunks_returns_empty_list_when_no_docs() -> N
     )
 
     assert result == []
+
+
+def test_search_relevant_chunks_prioritizes_explicit_filename() -> None:
+    redis = FakeRedis()
+    repository = RedisDocumentRepository(
+        redis_client=redis,  # type: ignore[arg-type]
+        index_name="docs",
+        vector_dim=384,
+    )
+
+    redis.hset(
+        "document:file-pipefy",
+        mapping={
+            "file_id": "file-pipefy",
+            "name": "teste.txt",
+            "uploaded_at": "2026-06-21T18:57:39Z",
+            "chunks": 1,
+        },
+    )
+    redis.hset(
+        "document:file-cabo-verde",
+        mapping={
+            "file_id": "file-cabo-verde",
+            "name": "teste2.docx",
+            "uploaded_at": "2026-06-21T18:57:44Z",
+            "chunks": 1,
+        },
+    )
+    redis.hset(
+        "doc:file-pipefy:chunk:0",
+        mapping={
+            "file_id": "file-pipefy",
+            "source": "teste.txt",
+            "chunk_index": 0,
+            "content": "Pipefy is a platform for workflow management.",
+        },
+    )
+    redis.hset(
+        "doc:file-cabo-verde:chunk:0",
+        mapping={
+            "file_id": "file-cabo-verde",
+            "source": "teste2.docx",
+            "chunk_index": 0,
+            "content": "Cabo Verde é um país africano.",
+        },
+    )
+
+    chunks = repository.search_relevant_chunks(
+        question="O que você pode dizer sobre o teste.txt?",
+        query_embedding=[0.1] * 384,
+        top_k=3,
+    )
+
+    assert len(chunks) == 1
+    assert chunks[0].source == "teste.txt"
+    assert "Pipefy" in chunks[0].chunk
+
+
+def test_select_diverse_chunks_prioritizes_distinct_documents() -> None:
+    repository = RedisDocumentRepository(
+        redis_client=FakeRedis(),  # type: ignore[arg-type]
+        index_name="docs",
+        vector_dim=384,
+    )
+
+    chunks = [
+        SourceChunk(
+            chunk="chunk a1",
+            source="a.txt",
+            score=0.1,
+            chunk_index=0,
+            file_id="doc-a",
+        ),
+        SourceChunk(
+            chunk="chunk a2",
+            source="a.txt",
+            score=0.2,
+            chunk_index=1,
+            file_id="doc-a",
+        ),
+        SourceChunk(
+            chunk="chunk b1",
+            source="b.txt",
+            score=0.3,
+            chunk_index=0,
+            file_id="doc-b",
+        ),
+        SourceChunk(
+            chunk="chunk c1",
+            source="c.txt",
+            score=0.4,
+            chunk_index=0,
+            file_id="doc-c",
+        ),
+    ]
+
+    selected = repository._select_diverse_chunks(
+        chunks=chunks,
+        top_k=3,
+    )
+
+    assert [chunk.file_id for chunk in selected] == [
+        "doc-a",
+        "doc-b",
+        "doc-c",
+    ]
+
+
+def test_decode_hash_ignores_binary_embedding_field() -> None:
+    repository = RedisDocumentRepository(
+        redis_client=FakeRedis(),  # type: ignore[arg-type]
+        index_name="docs",
+        vector_dim=384,
+    )
+
+    decoded = repository._decode_hash(
+        {
+            b"file_id": b"file-1",
+            b"source": b"document.txt",
+            b"content": b"readable text",
+            b"embedding": b"\xaf\x00\x00\x00",
+        }
+    )
+
+    assert decoded == {
+        "file_id": "file-1",
+        "source": "document.txt",
+        "content": "readable text",
+    }

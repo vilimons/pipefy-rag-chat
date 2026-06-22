@@ -132,22 +132,29 @@ def _stream_chat_events(
         },
     )
 
-    sources = tracer.trace(
-        name="redis_vector_retrieval",
-        run_type="retriever",
-        inputs={
-            "question": request.question,
-            "top_k": request.top_k,
-        },
-        metadata=metadata,
-        function=lambda: retrieve_sources(
-            question=request.question,
-            top_k=request.top_k,
-            settings=settings,
-            redis_client=redis_client,
-            embedding_service=embedding_service,
-        ),
-    )
+    try:
+        sources = tracer.trace(
+            name="redis_vector_retrieval",
+            run_type="retriever",
+            inputs={
+                "question": request.question,
+                "top_k": request.top_k,
+            },
+            metadata=metadata,
+            function=lambda: retrieve_sources(
+                question=request.question,
+                top_k=request.top_k,
+                settings=settings,
+                redis_client=redis_client,
+                embedding_service=embedding_service,
+            ),
+        )
+    except Exception:
+        yield _sse_event(
+            "error",
+            "Não foi possível recuperar informações dos documentos indexados.",
+        )
+        return
 
     yield _sse_event(
         "sources",
