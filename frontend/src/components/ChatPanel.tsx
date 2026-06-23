@@ -3,7 +3,8 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   clearChatHistory,
   getChatHistory,
-  streamChatMessage
+  streamChatMessage,
+  getHealth
 } from "../api/client";
 import type { ChatHistoryMessage, SourceChunk } from "../types/api";
 
@@ -35,6 +36,17 @@ export function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState("");
+  const [modelLabel, setModelLabel] = useState("Carregando modelo...");
+
+  useEffect(() => {
+    getHealth()
+      .then((health) => {
+        setModelLabel(health.llm?.model ?? "Modelo não informado");
+      })
+      .catch(() => {
+        setModelLabel("Modelo indisponível");
+      });
+  }, []);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -248,7 +260,7 @@ export function ChatPanel() {
 
           <div className="model-badge">
             <span className="status-dot" />
-            llama3:8b
+            {modelLabel}
           </div>
         </div>
 

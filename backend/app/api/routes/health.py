@@ -19,7 +19,7 @@ def get_redis_client(settings: Settings = Depends(get_settings)) -> Redis:
 def health_check(
     settings: Settings = Depends(get_settings),
     redis_client: Redis = Depends(get_redis_client),
-) -> dict[str, str]:
+) -> dict[str, object]:
     try:
         redis_client.ping()
         redis_status = "connected"
@@ -31,4 +31,8 @@ def health_check(
         "app": settings.app_name,
         "environment": settings.app_env,
         "redis": redis_status,
+        "llm": {
+            "provider": "ollama",
+            "model": settings.ollama_model,
+        },
     }

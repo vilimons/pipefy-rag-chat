@@ -10,6 +10,18 @@ import type {
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
+
+export type HealthResponse = {
+  status: string;
+  app: string;
+  environment: string;
+  redis: string;
+  llm?: {
+    provider: string;
+    model: string;
+  };
+};
+
 type StreamEvent = {
   event: string;
   data: unknown;
@@ -30,6 +42,12 @@ async function parseResponse<T>(response: Response): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+
+export async function getHealth(): Promise<HealthResponse> {
+  const response = await fetch(`${API_BASE_URL}/health`);
+  return parseResponse<HealthResponse>(response);
 }
 
 export async function listDocuments(): Promise<DocumentItem[]> {
