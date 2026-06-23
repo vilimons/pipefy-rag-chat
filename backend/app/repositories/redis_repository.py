@@ -147,10 +147,61 @@ class RedisDocumentRepository:
             question=question,
             documents=documents,
         )
+        target_documents = mentioned_documents or documents
 
-        if mentioned_documents:
+        is_metadata_question = self._is_document_metadata_question(question)
+        is_overview_question = self._is_collection_overview_question(question)
+
+        if mentioned_documents and is_overview_question:
             return self._get_representative_chunks_for_documents(
                 documents=mentioned_documents,
+                max_chunks=top_k,
+            )
+
+        if is_metadata_question:
+            initial_chunks = self._get_initial_chunks_for_documents(
+                documents=target_documents,
+                max_chunks=max(top_k, len(target_documents) * 2),
+            )
+            vector_chunks = self._safe_search_similar_chunks(
+                query_embedding=query_embedding,
+                top_k=max(top_k * 2, 12),
+            )
+
+            if mentioned_documents:
+                vector_chunks = self._prioritize_chunks_from_documents(
+                    chunks=vector_chunks,
+                    documents=mentioned_documents,
+                )
+
+            return self._merge_unique_chunks(
+                chunks=[*initial_chunks, *vector_chunks],
+                top_k=top_k,
+            )
+
+        if mentioned_documents:
+            vector_chunks = self._safe_search_similar_chunks(
+                query_embedding=query_embedding,
+                top_k=max(top_k * 2, 12),
+            )
+            initial_chunks = self._get_initial_chunks_for_documents(
+                documents=mentioned_documents,
+                max_chunks=min(top_k, 3),
+            )
+
+            prioritized_chunks = self._prioritize_chunks_from_documents(
+                chunks=vector_chunks,
+                documents=mentioned_documents,
+            )
+
+            return self._merge_unique_chunks(
+                chunks=[*prioritized_chunks, *initial_chunks, *vector_chunks],
+                top_k=top_k,
+            )
+
+        if len(documents) == 1 and is_overview_question:
+            return self._get_representative_chunks_for_documents(
+                documents=documents,
                 max_chunks=top_k,
             )
 
@@ -165,7 +216,7 @@ class RedisDocumentRepository:
                 max_chunks=overview_limit,
             )
 
-        return self.search_similar_chunks(
+        return self._safe_search_similar_chunks(
             query_embedding=query_embedding,
             top_k=top_k,
         )
@@ -204,6 +255,112 @@ class RedisDocumentRepository:
         ]
 
         return chunks[:top_k]
+
+    def _safe_search_similar_chunks(
+        self,
+        query_embedding: list[float],
+        top_k: int,
+    ) -> list[SourceChunk]:
+        try:
+            return self.search_similar_chunks(
+                query_embedding=query_embedding,
+                top_k=top_k,
+            )
+        except AttributeError:
+            return []
+
+    def _is_document_metadata_question(self, question: str) -> bool:
+        normalized_question = self._normalize_for_match(question)
+
+        metadata_terms = [
+            "autor",
+            "autores",
+            "author",
+            "authors",
+            "escritor",
+            "quem escreveu",
+            "quem sao os autores",
+            "titulo",
+            "title",
+            "nome do artigo",
+            "data",
+            "publicado",
+            "publicacao",
+            "published",
+            "published date",
+            "publication date",
+            "when was the article published",
+            "quando foi publicado",
+            "quando o artigo foi publicado",
+        ]
+
+        return any(term in normalized_question for term in metadata_terms)
+
+    def _get_initial_chunks_for_documents(
+        self,
+        documents: list[DocumentResponse],
+        max_chunks: int,
+    ) -> list[SourceChunk]:
+        selected_chunks: list[SourceChunk] = []
+
+        for document in documents:
+            document_chunks = self._get_chunks_for_document(document)
+
+            for chunk in document_chunks[:4]:
+                selected_chunks.append(chunk)
+
+                if len(selected_chunks) == max_chunks:
+                    return selected_chunks
+
+        return selected_chunks
+
+    def _prioritize_chunks_from_documents(
+        self,
+        chunks: list[SourceChunk],
+        documents: list[DocumentResponse],
+    ) -> list[SourceChunk]:
+        target_file_ids = {document.file_id for document in documents}
+
+        matching_chunks = [
+            chunk for chunk in chunks if chunk.file_id in target_file_ids
+        ]
+        other_chunks = [
+            chunk for chunk in chunks if chunk.file_id not in target_file_ids
+        ]
+
+        return [*matching_chunks, *other_chunks]
+
+    def _merge_unique_chunks(
+        self,
+        chunks: list[SourceChunk],
+        top_k: int,
+    ) -> list[SourceChunk]:
+        selected_chunks: list[SourceChunk] = []
+        seen_chunk_ids: set[tuple[str | None, int | None]] = set()
+        seen_content_signatures: set[tuple[str | None, int | None, str]] = set()
+
+        for chunk in chunks:
+            chunk_id_key = (chunk.file_id, chunk.chunk_index)
+            content_signature = (
+                chunk.source,
+                chunk.chunk_index,
+                self._normalize_for_match(chunk.chunk[:240]),
+            )
+
+            if chunk_id_key in seen_chunk_ids:
+                continue
+
+            if content_signature in seen_content_signatures:
+                continue
+
+            selected_chunks.append(chunk)
+            seen_chunk_ids.add(chunk_id_key)
+            seen_content_signatures.add(content_signature)
+
+            if len(selected_chunks) == top_k:
+                break
+
+        return selected_chunks
 
     def _find_mentioned_documents(
         self,
