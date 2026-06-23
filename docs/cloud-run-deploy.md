@@ -185,7 +185,11 @@ EMBEDDING_MODEL_NAME=/models/sentence-transformers/all-MiniLM-L6-v2
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 OLLAMA_MODEL=gemma2:2b
 
-LANGSMITH_TRACING=false
+LANGSMITH_TRACING=true
+LANGSMITH_PROJECT=pipefy-rag-chat-cloud
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_API_KEY=<secret-manager:langsmith-api-key>
+
 HF_HOME=/tmp/huggingface
 SENTENCE_TRANSFORMERS_HOME=/tmp/sentence-transformers
 ```
@@ -471,6 +475,7 @@ Medidas usadas para reduzir custo e risco:
 * Documentos de demonstração sem dados sensíveis.
 * Budget alert configurado no projeto GCP.
 * Possibilidade de remover os serviços após avaliação.
+* LangSmith habilitado na API cloud para observabilidade dos traces de retrieval, prompt e chamadas do fluxo RAG.
 
 Como a API pública não possui autenticação por usuário, a URL da demo deve ser compartilhada apenas com os avaliadores e mantida ativa somente durante o período necessário.
 
