@@ -14,11 +14,13 @@ class OllamaClient:
     base_url: str
     model: str
     timeout_seconds: float = 120.0
+    auth_audience: str = ""
 
     def generate(self, prompt: str) -> str:
         try:
             response = httpx.post(
                 f"{self.base_url}/api/generate",
+                headers=self._headers(),
                 json={
                     "model": self.model,
                     "prompt": prompt,
@@ -41,6 +43,7 @@ class OllamaClient:
             with httpx.stream(
                 "POST",
                 f"{self.base_url}/api/generate",
+                headers=self._headers(),
                 json={
                     "model": self.model,
                     "prompt": prompt,
@@ -67,3 +70,22 @@ class OllamaClient:
                         break
         except httpx.HTTPError as error:
             raise OllamaServiceError("Serviço de LLM indisponível.") from error
+
+    def _headers(self) -> dict[str, str]:
+        if not self.auth_audience:
+            return {}
+
+        return {
+            "Authorization": f"Bearer {self._identity_token()}",
+        }
+
+    def _identity_token(self) -> str:
+        response = httpx.get(
+            "http://metadata/computeMetadata/v1/instance/service-accounts/default/identity",
+            params={"audience": self.auth_audience},
+            headers={"Metadata-Flavor": "Google"},
+            timeout=10.0,
+        )
+        response.raise_for_status()
+
+        return response.text

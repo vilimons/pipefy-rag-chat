@@ -38,6 +38,7 @@ def get_ollama_client(
     return OllamaClient(
         base_url=settings.ollama_base_url,
         model=settings.ollama_model,
+        auth_audience=settings.ollama_auth_audience,
     )
 
 
