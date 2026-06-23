@@ -1117,3 +1117,163 @@ body {
     height: clamp(540px, calc(100dvh - 285px), 720px);
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Final polish: chat session management actions                               */
+/* -------------------------------------------------------------------------- */
+
+.session-item {
+  gap: 0.55rem;
+}
+
+.session-select {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.session-select strong {
+  overflow-wrap: anywhere;
+}
+
+.session-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.session-action {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 70%);
+  color: var(--muted-strong);
+  padding: 0.32rem 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.session-action:hover {
+  border-color: var(--purple);
+  color: var(--purple);
+}
+
+.session-action.danger-link {
+  color: var(--danger);
+}
+
+.session-action.danger-link:hover {
+  border-color: #ffd1cc;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Final polish: session modal dialogs                                         */
+/* -------------------------------------------------------------------------- */
+
+.session-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(15 23 42 / 42%);
+  backdrop-filter: blur(6px);
+}
+
+.session-modal {
+  width: min(440px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 1.35rem;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 24px 70px rgb(32 24 74 / 28%);
+}
+
+.session-modal-content {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1.25rem;
+}
+
+.session-modal-content h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.35rem;
+  letter-spacing: -0.035em;
+}
+
+.session-modal-content p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.session-modal-content strong {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.session-modal-label {
+  color: var(--muted-strong);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.session-modal-content input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  padding: 0.85rem 0.95rem;
+  color: var(--text);
+  background: #fff;
+  font: inherit;
+  font-weight: 700;
+}
+
+.session-modal-content input:focus {
+  border-color: var(--purple);
+  box-shadow: 0 0 0 4px rgb(108 80 255 / 12%);
+  outline: none;
+}
+
+.session-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  margin-top: 0.25rem;
+}
+
+.danger-text {
+  color: var(--danger);
+}
+
+.danger-button {
+  border: 0;
+  border-radius: 0.9rem;
+  background: var(--danger);
+  color: #fff;
+  padding: 0.75rem 1rem;
+  font-weight: 900;
+  box-shadow: 0 12px 30px rgb(232 70 54 / 18%);
+}
+
+.danger-button:hover {
+  filter: brightness(0.96);
+}
+
+@media (max-width: 560px) {
+  .session-modal-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .session-modal-actions button {
+    width: 100%;
+  }
+}
