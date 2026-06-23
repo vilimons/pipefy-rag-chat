@@ -825,3 +825,295 @@ button.compact {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Final polish: stable two-column workspace and scroll behavior               */
+/* -------------------------------------------------------------------------- */
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  overflow-y: auto;
+}
+
+.app-frame {
+  min-height: 100dvh;
+}
+
+.app-sidebar {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.app-main {
+  min-width: 0;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
+  gap: 1.4rem;
+  align-items: stretch;
+}
+
+.left-rail {
+  min-width: 0;
+  align-content: start;
+}
+
+.panel,
+.chat-surface {
+  min-width: 0;
+}
+
+.panel {
+  overflow: hidden;
+}
+
+.document-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.document-list li {
+  align-items: flex-start;
+}
+
+.document-list strong {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.chat-surface {
+  min-height: 0;
+  height: clamp(520px, calc(100dvh - 390px), 720px);
+  display: grid;
+  grid-template-columns: 245px minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.chat-sidebar {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.session-list {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.session-item {
+  overflow-wrap: anywhere;
+}
+
+.chat-main {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-main-header {
+  flex-shrink: 0;
+}
+
+.messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  padding-right: 0.35rem;
+}
+
+.message {
+  max-width: min(760px, 88%);
+  overflow-wrap: anywhere;
+}
+
+.message p {
+  overflow-wrap: anywhere;
+}
+
+.sources-box {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.sources-box li,
+.sources-box span {
+  overflow-wrap: anywhere;
+}
+
+.chat-form {
+  flex-shrink: 0;
+}
+
+.chat-form input {
+  min-width: 0;
+}
+
+@media (max-width: 1180px) {
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .left-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chat-surface {
+    height: min(720px, calc(100dvh - 2rem));
+  }
+}
+
+@media (max-width: 860px) {
+  .left-rail,
+  .chat-surface {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-surface {
+    height: auto;
+    min-height: 680px;
+  }
+
+  .chat-sidebar {
+    max-height: 260px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .session-list {
+    max-height: 170px;
+  }
+
+  .messages {
+    min-height: 360px;
+  }
+
+  .message {
+    max-width: 100%;
+  }
+
+  .chat-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Final polish: compact hero so chat is visible on first screen               */
+/* -------------------------------------------------------------------------- */
+
+.app-main {
+  padding-top: 0.65rem;
+  padding-bottom: 1rem;
+}
+
+.top-search {
+  margin-bottom: 1rem;
+}
+
+.search-box {
+  max-width: 720px;
+  padding: 0.08rem 0.9rem;
+}
+
+.search-box input {
+  padding: 0.62rem 0;
+}
+
+.page-heading {
+  margin-bottom: 0.95rem;
+}
+
+.page-heading p,
+.eyebrow {
+  margin-bottom: 0.2rem;
+  font-size: 0.72rem;
+}
+
+.page-heading h1 {
+  font-size: clamp(2.25rem, 3.2vw, 3.05rem);
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.page-heading span {
+  margin-top: 0.55rem;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.summary-strip {
+  max-width: 760px;
+  margin-bottom: 0.9rem;
+}
+
+.summary-strip div {
+  padding: 0.9rem 1.25rem;
+}
+
+.summary-strip strong {
+  font-size: 1.35rem;
+}
+
+.error.banner {
+  margin-bottom: 0.85rem;
+  padding: 0.72rem 0.9rem;
+}
+
+.workspace-grid {
+  gap: 1rem;
+}
+
+.left-rail {
+  gap: 0.75rem;
+}
+
+.panel {
+  padding: 1rem;
+}
+
+.panel-heading {
+  margin-bottom: 0.85rem;
+}
+
+.chat-surface {
+  height: clamp(560px, calc(100dvh - 305px), 760px);
+}
+
+@media (max-width: 1180px) {
+  .chat-surface {
+    height: min(720px, calc(100dvh - 1.25rem));
+  }
+}
+
+@media (max-height: 820px) and (min-width: 1181px) {
+  .top-search {
+    margin-bottom: 0.75rem;
+  }
+
+  .page-heading h1 {
+    font-size: clamp(2rem, 2.8vw, 2.65rem);
+  }
+
+  .page-heading span {
+    margin-top: 0.45rem;
+    font-size: 0.86rem;
+  }
+
+  .summary-strip div {
+    padding: 0.7rem 1rem;
+  }
+
+  .chat-surface {
+    height: clamp(540px, calc(100dvh - 285px), 720px);
+  }
+}
