@@ -1,22 +1,24 @@
 # Deploy em Cloud Run
 
-Este documento descreve a arquitetura e os procedimentos usados para disponibilizar uma versão cloud do **Pipefy RAG Chat**.
+Este documento descreve a arquitetura cloud usada para disponibilizar uma versão pública temporária do **Pipefy RAG Chat**.
 
-A aplicação também pode ser executada localmente com Docker Compose, Redis Stack e Ollama. O deploy cloud foi criado para permitir uma demonstração pública temporária, onde avaliadores podem acessar a interface, enviar documentos próprios não sensíveis e testar o fluxo completo de RAG.
+A aplicação também pode ser executada localmente com Docker Compose, Redis Stack e Ollama. O deploy cloud foi criado para permitir uma demonstração técnica em ambiente público, com frontend acessível via browser, API pública, Redis gerenciado e modelo LLM open-source rodando em Cloud Run com GPU.
 
-> Importante: a instância pública é um ambiente compartilhado de demonstração. Não envie documentos sensíveis, confidenciais, pessoais ou proprietários.
+> Importante: a demo pública é um ambiente compartilhado e não possui autenticação por usuário. Não envie documentos sensíveis, confidenciais, pessoais ou proprietários.
 
 ## Visão geral
 
-A versão cloud utiliza:
+A arquitetura cloud atual utiliza:
 
 * Cloud Run para o frontend.
-* Cloud Run para a API.
-* Ollama como sidecar da API.
-* Memorystore Redis para persistência e busca vetorial.
+* Cloud Run para a API FastAPI.
+* Cloud Run GPU privado para o Ollama.
+* Modelo `qwen2.5:7b` executado via Ollama.
+* Memorystore Redis para armazenamento de documentos, chunks, embeddings e busca vetorial.
 * Artifact Registry para armazenar imagens Docker.
 * Cloud Build para build das imagens.
-* GitHub Actions para validação contínua do código.
+* Secret Manager para armazenar a chave do LangSmith.
+* LangSmith para observabilidade dos traces do fluxo RAG.
 
 ## Arquitetura cloud
 
@@ -31,138 +33,344 @@ Cloud Run - Frontend React/Nginx
   v
 Cloud Run - API FastAPI
   |
-  | Private network
+  | private network
   v
 Memorystore Redis
   |
-  | Hashes + embeddings + metadados
+  | chunks + embeddings + metadados
   v
-Documentos indexados
+Redis Vector Search
 
 Cloud Run - API FastAPI
   |
-  | localhost:11434
+  | HTTPS + identity token
   v
-Sidecar Ollama CPU
+Cloud Run - Ollama GPU privado
   |
   v
-gemma2:2b
+qwen2.5:7b
 ```
 
-## Componentes
+## Serviços
 
-### Frontend
+| Serviço                 | Função                             |
+| ----------------------- | ---------------------------------- |
+| `pipefy-rag-frontend`   | Frontend público da aplicação.     |
+| `pipefy-rag-api`        | API pública FastAPI.               |
+| `pipefy-rag-ollama-gpu` | Serviço privado do Ollama com GPU. |
+| `pipefy-rag-redis`      | Instância Memorystore Redis.       |
 
-O frontend é uma aplicação React com TypeScript e Vite, servida por Nginx em Cloud Run.
+O frontend público chama a API. A API chama o serviço privado do Ollama GPU usando um identity token do Cloud Run.
 
-Responsabilidades:
-
-* upload de arquivos;
-* listagem de documentos;
-* exclusão de documentos;
-* criação de sessões de chat;
-* envio de perguntas;
-* exibição de respostas;
-* exibição das fontes recuperadas;
-* leitura dinâmica do modelo ativo via `/health`.
-
-O frontend é construído com a variável `VITE_API_BASE_URL`, apontando para a API cloud ativa.
-
-### API
-
-A API é construída com FastAPI e executa o fluxo de ingestão e RAG.
-
-Responsabilidades:
-
-* receber arquivos `.txt`, `.pdf` e `.docx`;
-* extrair texto dos documentos;
-* dividir o conteúdo em chunks;
-* gerar embeddings;
-* salvar chunks e metadados no Redis;
-* executar busca vetorial;
-* montar o contexto;
-* chamar o LLM via Ollama;
-* retornar resposta com fontes.
-
-### Redis
-
-Na versão cloud, o Redis é fornecido pelo Memorystore Redis.
-
-Ele é usado para:
-
-* armazenar metadados de documentos;
-* armazenar chunks;
-* armazenar embeddings;
-* executar busca vetorial.
-
-### Ollama sidecar
-
-O Ollama roda como sidecar no mesmo serviço Cloud Run da API.
-
-A API acessa o Ollama por:
+## Fluxo cloud
 
 ```text
-http://127.0.0.1:11434
+Usuário envia documento
+  |
+  v
+Frontend Cloud Run
+  |
+  v
+API Cloud Run
+  |
+  v
+Extração de texto
+  |
+  v
+Chunking
+  |
+  v
+Embeddings
+  |
+  v
+Memorystore Redis
 ```
-
-Na versão cloud, o modelo utilizado é:
 
 ```text
-gemma2:2b
+Usuário faz pergunta
+  |
+  v
+Frontend Cloud Run
+  |
+  v
+API Cloud Run
+  |
+  v
+Busca vetorial + estratégia RAG
+  |
+  v
+Contexto recuperado
+  |
+  v
+Ollama GPU privado
+  |
+  v
+Resposta + fontes
 ```
 
-Esse modelo foi escolhido por ser mais leve e mais estável para uma demonstração cloud em CPU.
+## Modelo LLM em cloud
 
-## Diferenças entre execução local e cloud
-
-### Execução local
-
-A execução local usa:
-
-* Docker Compose;
-* Redis Stack;
-* API FastAPI;
-* frontend React/Nginx;
-* Ollama local;
-* modelo `llama3:8b`;
-* embeddings com `sentence-transformers/all-MiniLM-L6-v2`.
-
-### Execução cloud
-
-A execução cloud usa:
-
-* Cloud Run para frontend;
-* Cloud Run para API;
-* Memorystore Redis;
-* Ollama sidecar CPU;
-* modelo `gemma2:2b`;
-* embeddings salvos dentro da imagem Docker da API.
-
-Na cloud, o modelo de embeddings é salvo durante o build em:
+A versão cloud usa:
 
 ```text
-/models/sentence-transformers/all-MiniLM-L6-v2
+qwen2.5:7b
 ```
 
-Isso evita que a API precise baixar o modelo da Hugging Face durante o primeiro upload.
+O modelo roda em um serviço Cloud Run separado com GPU, e não como sidecar da API.
 
-## Serviços Cloud Run
+Essa arquitetura foi escolhida porque:
 
-A demonstração cloud pode usar os seguintes serviços:
+* isola a API do runtime pesado do LLM;
+* facilita trocar o modelo sem alterar a API;
+* permite manter o serviço do modelo privado;
+* evita expor diretamente o endpoint do Ollama;
+* melhora a qualidade das respostas em relação ao modelo menor usado anteriormente;
+* facilita depuração dos logs do LLM separadamente.
 
-| Serviço                 | Descrição                             |
-| ----------------------- | ------------------------------------- |
-| `pipefy-rag-frontend`   | Frontend público da aplicação.        |
-| `pipefy-rag-api-ollama` | API principal com sidecar Ollama CPU. |
-| `pipefy-rag-api`        | API base/fallback sem sidecar Ollama. |
+## Serviço Ollama GPU
 
-O frontend público deve apontar para `pipefy-rag-api-ollama`, pois esse serviço executa o fluxo completo:
+O serviço `pipefy-rag-ollama-gpu` executa Ollama com GPU e modelo `qwen2.5:7b`.
+
+Variáveis relevantes:
+
+```env
+OLLAMA_DEBUG=1
+OLLAMA_LLM_LIBRARY=cuda_v13
+OLLAMA_FLASH_ATTENTION=false
+OLLAMA_HOST=0.0.0.0:8080
+OLLAMA_MODELS=/models
+OLLAMA_KEEP_ALIVE=-1
+OLLAMA_NUM_PARALLEL=1
+NVIDIA_VISIBLE_DEVICES=all
+NVIDIA_DRIVER_CAPABILITIES=compute,utility
+GGML_CUDA_ENABLE_UNIFIED_MEMORY=1
+```
+
+Durante os testes, o backend CUDA v12 apresentou erro de runtime. O serviço funcionou corretamente ao forçar:
+
+```env
+OLLAMA_LLM_LIBRARY=cuda_v13
+OLLAMA_FLASH_ATTENTION=false
+```
+
+O serviço foi implantado sem acesso público:
 
 ```text
-upload → embeddings → Redis → retrieval → Ollama → resposta com fontes
+--no-allow-unauthenticated
 ```
 
-## Variáveis de ambiente da API cloud
+A API recebe permissão para chamá-lo com:
+
+```text
+roles/run.invoker
+```
+
+## Deploy do Ollama GPU
+
+Exemplo de variáveis:
+
+```bash
+export PROJECT_ID="project-0aab3e64-5191-4bc7-8fa"
+export REGION="us-central1"
+export AR_REPO="pipefy-rag"
+export MODEL_NAME="qwen2.5:7b"
+export OLLAMA_GPU_SERVICE="pipefy-rag-ollama-gpu"
+
+gcloud config set project "$PROJECT_ID"
+```
+
+Exemplo de Dockerfile para o serviço Ollama GPU:
+
+```Dockerfile
+FROM ollama/ollama:latest
+
+ENV OLLAMA_HOST=0.0.0.0:8080
+ENV OLLAMA_MODELS=/models
+ENV OLLAMA_KEEP_ALIVE=-1
+ENV OLLAMA_NUM_PARALLEL=1
+
+ARG MODEL_NAME=qwen2.5:7b
+
+RUN ollama serve & \
+    sleep 10 && \
+    ollama pull ${MODEL_NAME} && \
+    pkill ollama
+
+EXPOSE 8080
+
+CMD ["serve"]
+```
+
+Build da imagem:
+
+```bash
+export OLLAMA_GPU_IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$AR_REPO/ollama-gpu-qwen25-7b:latest"
+
+cat > cloudbuild.yaml <<EOF
+timeout: "1800s"
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "--build-arg"
+      - "MODEL_NAME=$MODEL_NAME"
+      - "-t"
+      - "$OLLAMA_GPU_IMAGE"
+      - "."
+images:
+  - "$OLLAMA_GPU_IMAGE"
+EOF
+
+gcloud builds submit . --config cloudbuild.yaml
+```
+
+Deploy do serviço GPU:
+
+```bash
+gcloud run deploy "$OLLAMA_GPU_SERVICE" \
+  --image "$OLLAMA_GPU_IMAGE" \
+  --region "$REGION" \
+  --platform managed \
+  --execution-environment gen2 \
+  --no-allow-unauthenticated \
+  --gpu 1 \
+  --gpu-type nvidia-l4 \
+  --no-gpu-zonal-redundancy \
+  --cpu 4 \
+  --memory 16Gi \
+  --no-cpu-throttling \
+  --concurrency 1 \
+  --timeout 900 \
+  --min-instances 0 \
+  --max-instances 1 \
+  --port 8080
+```
+
+Após o primeiro deploy, atualizar as variáveis do serviço:
+
+```bash
+cat > /tmp/ollama-gpu-env.yaml <<'EOF'
+OLLAMA_DEBUG: "1"
+OLLAMA_LLM_LIBRARY: "cuda_v13"
+OLLAMA_FLASH_ATTENTION: "false"
+OLLAMA_HOST: "0.0.0.0:8080"
+OLLAMA_MODELS: "/models"
+OLLAMA_KEEP_ALIVE: "-1"
+OLLAMA_NUM_PARALLEL: "1"
+NVIDIA_VISIBLE_DEVICES: "all"
+NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
+GGML_CUDA_ENABLE_UNIFIED_MEMORY: "1"
+EOF
+
+gcloud run services update "$OLLAMA_GPU_SERVICE" \
+  --region "$REGION" \
+  --env-vars-file /tmp/ollama-gpu-env.yaml
+```
+
+## Teste do Ollama GPU
+
+Obter URL:
+
+```bash
+export OLLAMA_GPU_URL="$(gcloud run services describe "$OLLAMA_GPU_SERVICE" \
+  --region "$REGION" \
+  --format='value(status.url)')"
+
+echo "$OLLAMA_GPU_URL"
+```
+
+Gerar identity token:
+
+```bash
+export ID_TOKEN="$(gcloud auth print-identity-token --audiences="$OLLAMA_GPU_URL")"
+```
+
+Listar modelos:
+
+```bash
+curl -s "$OLLAMA_GPU_URL/api/tags" \
+  -H "Authorization: Bearer $ID_TOKEN" | jq
+```
+
+Testar geração:
+
+```bash
+curl -s "$OLLAMA_GPU_URL/api/generate" \
+  -H "Authorization: Bearer $ID_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen2.5:7b",
+    "prompt": "Answer in one sentence: what is retrieval augmented generation?",
+    "stream": false
+  }' | jq
+```
+
+Resposta esperada:
+
+```json
+{
+  "model": "qwen2.5:7b",
+  "response": "Retrieval-Augmented Generation ...",
+  "done": true
+}
+```
+
+## API cloud
+
+A API roda no serviço:
+
+```text
+pipefy-rag-api
+```
+
+Ela é pública para permitir acesso pelo frontend, mas o serviço do Ollama GPU permanece privado.
+
+A API usa:
+
+```env
+OLLAMA_BASE_URL=<OLLAMA_GPU_URL>
+OLLAMA_MODEL=qwen2.5:7b
+OLLAMA_AUTH_AUDIENCE=<OLLAMA_GPU_URL>
+```
+
+Quando `OLLAMA_AUTH_AUDIENCE` está configurado, a API busca um identity token no metadata server do Cloud Run e envia o header:
+
+```http
+Authorization: Bearer <token>
+```
+
+Esse comportamento permite que a API chame o serviço privado do Ollama GPU sem expor o endpoint do modelo publicamente.
+
+## Permissão para a API chamar o Ollama GPU
+
+Descobrir a service account da API:
+
+```bash
+export API_SERVICE="pipefy-rag-api"
+
+export API_RUNTIME_SA="$(gcloud run services describe "$API_SERVICE" \
+  --region "$REGION" \
+  --format='value(spec.template.spec.serviceAccountName)')"
+
+if [ -z "$API_RUNTIME_SA" ]; then
+  export PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" \
+    --format='value(projectNumber)')"
+  export API_RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+fi
+
+echo "$API_RUNTIME_SA"
+```
+
+Conceder permissão de invoker no serviço GPU:
+
+```bash
+gcloud run services add-iam-policy-binding "$OLLAMA_GPU_SERVICE" \
+  --region "$REGION" \
+  --member="serviceAccount:$API_RUNTIME_SA" \
+  --role="roles/run.invoker"
+```
+
+## Variáveis de ambiente da API
 
 Exemplo:
 
@@ -182,8 +390,9 @@ MAX_HISTORY_MESSAGES=6
 
 EMBEDDING_MODEL_NAME=/models/sentence-transformers/all-MiniLM-L6-v2
 
-OLLAMA_BASE_URL=http://127.0.0.1:11434
-OLLAMA_MODEL=gemma2:2b
+OLLAMA_BASE_URL=<ollama-gpu-cloud-run-url>
+OLLAMA_MODEL=qwen2.5:7b
+OLLAMA_AUTH_AUDIENCE=<ollama-gpu-cloud-run-url>
 
 LANGSMITH_TRACING=true
 LANGSMITH_PROJECT=pipefy-rag-chat-cloud
@@ -194,44 +403,25 @@ HF_HOME=/tmp/huggingface
 SENTENCE_TRANSFORMERS_HOME=/tmp/sentence-transformers
 ```
 
-## Variáveis de ambiente do frontend cloud
+## Build da API
 
-Exemplo:
+A imagem cloud da API usa:
 
-```env
-VITE_API_BASE_URL=<url-da-api-cloud-run>
+```text
+backend/Dockerfile.cloud
 ```
 
-O frontend não possui o nome do modelo hardcoded. Ele consulta o endpoint `/health` da API ativa e exibe dinamicamente o modelo retornado.
+Esse Dockerfile salva o modelo de embeddings dentro da imagem em:
 
-Exemplo de resposta do `/health`:
-
-```json
-{
-  "status": "ok",
-  "app": "pipefy-rag-chat",
-  "environment": "production",
-  "redis": "connected",
-  "llm": {
-    "provider": "ollama",
-    "model": "gemma2:2b"
-  }
-}
+```text
+/models/sentence-transformers/all-MiniLM-L6-v2
 ```
 
-## Build da imagem da API
+Isso evita download do modelo em runtime.
 
-A imagem cloud da API usa `backend/Dockerfile.cloud`.
-
-O Dockerfile cloud instala as dependências e baixa o modelo de embeddings durante o build.
-
-Exemplo de build com Cloud Build:
+Build:
 
 ```bash
-export PROJECT_ID="<gcp-project-id>"
-export REGION="us-central1"
-export AR_REPO="pipefy-rag"
-
 export API_IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$AR_REPO/api:latest"
 
 cat > /tmp/cloudbuild-api.yaml <<EOF
@@ -252,17 +442,12 @@ gcloud builds submit ./backend \
   --config /tmp/cloudbuild-api.yaml
 ```
 
-## Deploy da API com Ollama sidecar
+## Deploy da API
 
-Exemplo de deploy da API com Ollama CPU:
+Obter Redis:
 
 ```bash
-export PROJECT_ID="<gcp-project-id>"
-export REGION="us-central1"
-export AR_REPO="pipefy-rag"
-export REDIS_INSTANCE="<memorystore-instance-name>"
-
-export API_IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$AR_REPO/api:latest"
+export REDIS_INSTANCE="pipefy-rag-redis"
 
 export REDIS_HOST="$(gcloud redis instances describe "$REDIS_INSTANCE" \
   --region="$REGION" \
@@ -271,9 +456,21 @@ export REDIS_HOST="$(gcloud redis instances describe "$REDIS_INSTANCE" \
 export REDIS_PORT="$(gcloud redis instances describe "$REDIS_INSTANCE" \
   --region="$REGION" \
   --format='value(port)')"
+```
 
-gcloud beta run deploy pipefy-rag-api-ollama \
-  --project "$PROJECT_ID" \
+Obter URL do Ollama GPU:
+
+```bash
+export OLLAMA_GPU_URL="$(gcloud run services describe "$OLLAMA_GPU_SERVICE" \
+  --region "$REGION" \
+  --format='value(status.url)')"
+```
+
+Deploy:
+
+```bash
+gcloud run deploy "$API_SERVICE" \
+  --image "$API_IMAGE" \
   --region "$REGION" \
   --platform managed \
   --execution-environment gen2 \
@@ -281,40 +478,41 @@ gcloud beta run deploy pipefy-rag-api-ollama \
   --network default \
   --subnet default \
   --vpc-egress private-ranges-only \
-  --min-instances 0 \
-  --max-instances 1 \
-  --timeout 900 \
-  --concurrency 1 \
-  --no-cpu-throttling \
-  --container api \
-  --image "$API_IMAGE" \
   --port 8080 \
   --cpu 2 \
   --memory 4Gi \
-  --depends-on ollama \
-  --set-env-vars "APP_NAME=pipefy-rag-chat,APP_ENV=production,REDIS_HOST=$REDIS_HOST,REDIS_PORT=$REDIS_PORT,REDIS_INDEX_NAME=docs,REDIS_VECTOR_DIM=384,CHUNK_SIZE=500,CHUNK_OVERLAP=50,TOP_K=5,MAX_HISTORY_MESSAGES=6,EMBEDDING_MODEL_NAME=/models/sentence-transformers/all-MiniLM-L6-v2,OLLAMA_BASE_URL=http://127.0.0.1:11434,OLLAMA_MODEL=gemma2:2b,LANGSMITH_TRACING=false,HF_HOME=/tmp/huggingface,SENTENCE_TRANSFORMERS_HOME=/tmp/sentence-transformers" \
-  --container ollama \
-  --image ollama/ollama:latest \
-  --cpu 4 \
-  --memory 8Gi \
-  --startup-probe "tcpSocket.port=11434,initialDelaySeconds=60,failureThreshold=1,timeoutSeconds=60,periodSeconds=60" \
-  --set-env-vars "OLLAMA_HOST=0.0.0.0:11434,OLLAMA_NUM_PARALLEL=1,OLLAMA_KEEP_ALIVE=-1,OLLAMA_DEBUG=false,CUDA_VISIBLE_DEVICES=-1" \
-  --command "bash" \
-  --args "-c,ollama serve & sleep 10 && ollama pull gemma2:2b && wait"
+  --timeout 900 \
+  --concurrency 10 \
+  --min-instances 0 \
+  --max-instances 2 \
+  --ingress all \
+  --set-env-vars "APP_NAME=pipefy-rag-chat,APP_ENV=production,REDIS_HOST=$REDIS_HOST,REDIS_PORT=$REDIS_PORT,REDIS_INDEX_NAME=docs,REDIS_VECTOR_DIM=384,CHUNK_SIZE=500,CHUNK_OVERLAP=50,TOP_K=5,MAX_HISTORY_MESSAGES=6,EMBEDDING_MODEL_NAME=/models/sentence-transformers/all-MiniLM-L6-v2,OLLAMA_BASE_URL=$OLLAMA_GPU_URL,OLLAMA_MODEL=qwen2.5:7b,OLLAMA_AUTH_AUDIENCE=$OLLAMA_GPU_URL,LANGSMITH_TRACING=true,LANGSMITH_PROJECT=pipefy-rag-chat-cloud,LANGSMITH_ENDPOINT=https://api.smith.langchain.com,HF_HOME=/tmp/huggingface,SENTENCE_TRANSFORMERS_HOME=/tmp/sentence-transformers" \
+  --update-secrets "LANGSMITH_API_KEY=langsmith-api-key:latest"
 ```
 
-## Build do frontend
-
-A imagem cloud do frontend usa `frontend/Dockerfile.cloud`.
-
-Exemplo:
+Garantir acesso público à API:
 
 ```bash
-export PROJECT_ID="<gcp-project-id>"
-export REGION="us-central1"
-export AR_REPO="pipefy-rag"
+gcloud run services add-iam-policy-binding "$API_SERVICE" \
+  --region "$REGION" \
+  --member="allUsers" \
+  --role="roles/run.invoker"
+```
 
-export OLLAMA_API_URL="$(gcloud run services describe pipefy-rag-api-ollama \
+## Frontend cloud
+
+O frontend é construído com:
+
+```env
+VITE_API_BASE_URL=<api-cloud-run-url>
+```
+
+Build:
+
+```bash
+export FRONTEND_SERVICE="pipefy-rag-frontend"
+
+export API_URL="$(gcloud run services describe "$API_SERVICE" \
   --region "$REGION" \
   --format='value(status.url)')"
 
@@ -328,7 +526,7 @@ steps:
       - "-f"
       - "Dockerfile.cloud"
       - "--build-arg"
-      - "VITE_API_BASE_URL=$OLLAMA_API_URL"
+      - "VITE_API_BASE_URL=$API_URL"
       - "-t"
       - "$FRONTEND_IMAGE"
       - "."
@@ -340,10 +538,10 @@ gcloud builds submit ./frontend \
   --config /tmp/cloudbuild-frontend.yaml
 ```
 
-## Deploy do frontend
+Deploy:
 
 ```bash
-gcloud run deploy pipefy-rag-frontend \
+gcloud run deploy "$FRONTEND_SERVICE" \
   --image "$FRONTEND_IMAGE" \
   --region "$REGION" \
   --platform managed \
@@ -352,59 +550,29 @@ gcloud run deploy pipefy-rag-frontend \
   --memory 512Mi \
   --cpu 1 \
   --min-instances 0 \
-  --max-instances 2
+  --max-instances 2 \
+  --ingress all
 ```
 
-## Demo pública
+Garantir acesso público ao frontend:
 
-A URL pública do frontend deve ser compartilhada diretamente com os avaliadores no momento da entrega.
-
-Por segurança, ela não precisa ficar exposta no README do repositório.
-
-> A instância pública é um ambiente compartilhado de demonstração. Não envie documentos sensíveis, confidenciais, pessoais ou proprietários.
-
-### Como testar
-
-1. Acesse a URL do frontend fornecida na entrega.
-2. Opcionalmente, remova os documentos de exemplo.
-3. Envie um arquivo `.txt`, `.pdf` ou `.docx`.
-4. Aguarde a indexação do documento.
-5. Faça perguntas sobre o conteúdo enviado.
-6. Abra a seção **Fontes recuperadas** para validar os trechos usados na resposta.
-7. Remova o documento após o teste, se desejar.
-
-### Sugestões de perguntas
-
-```text
-Resuma os documentos indexados.
+```bash
+gcloud run services add-iam-policy-binding "$FRONTEND_SERVICE" \
+  --region "$REGION" \
+  --member="allUsers" \
+  --role="roles/run.invoker"
 ```
-
-```text
-Resuma o arquivo nome_do_arquivo.pdf usando apenas as fontes recuperadas.
-```
-
-```text
-Quais são os principais pontos do arquivo nome_do_arquivo.docx?
-```
-
-```text
-Segundo o arquivo nome_do_arquivo.txt, quais informações são apresentadas?
-```
-
-Perguntas muito curtas ou ambíguas podem gerar respostas menos precisas, especialmente na versão cloud com modelo menor. Para melhores resultados, mencione o nome do arquivo ou faça uma pergunta explícita.
 
 ## Smoke tests
 
-Defina a URL da API:
+### API health check
 
 ```bash
-export OLLAMA_API_URL="<url-da-api-cloud-run>"
-```
+export API_URL="$(gcloud run services describe pipefy-rag-api \
+  --region "$REGION" \
+  --format='value(status.url)')"
 
-### Health check
-
-```bash
-curl -s "$OLLAMA_API_URL/health" | python3 -m json.tool
+curl -s "$API_URL/health" | jq
 ```
 
 Resposta esperada:
@@ -417,161 +585,222 @@ Resposta esperada:
   "redis": "connected",
   "llm": {
     "provider": "ollama",
-    "model": "gemma2:2b"
+    "model": "qwen2.5:7b"
   }
 }
-```
-
-### Listar documentos
-
-```bash
-curl -s "$OLLAMA_API_URL/documents" | python3 -m json.tool
 ```
 
 ### Upload
 
 ```bash
-cat > /tmp/exemplo.txt <<'EOF'
-Este documento contém informações de exemplo para testar o fluxo RAG.
+cat > /tmp/rag_cloud_test.txt <<'EOF'
+Pipefy is a platform for process automation, workflow management and business operations.
+This file is used to validate the cloud RAG flow.
 EOF
 
-curl -i -X POST "$OLLAMA_API_URL/upload" \
-  -F "file=@/tmp/exemplo.txt"
+curl -s -X POST "$API_URL/upload" \
+  -F "file=@/tmp/rag_cloud_test.txt" | jq
 ```
 
-### Retrieval sem LLM
+### Retrieval
 
 ```bash
-curl -s -X POST "$OLLAMA_API_URL/chat/retrieve" \
+curl -s -X POST "$API_URL/chat/retrieve" \
   -H "Content-Type: application/json" \
   -d '{
-    "question": "Resuma o arquivo exemplo.txt usando apenas as fontes recuperadas.",
-    "session_id": "smoke-retrieve",
+    "question": "What platform helps with workflow management?",
+    "session_id": "cloud-retrieve-smoke",
     "top_k": 5
-  }' | python3 -m json.tool
+  }' | jq
 ```
 
-### Chat completo
+### Chat
 
 ```bash
-curl -s -X POST "$OLLAMA_API_URL/chat" \
+curl -s -X POST "$API_URL/chat" \
   -H "Content-Type: application/json" \
   -d '{
-    "question": "Resuma os documentos indexados.",
-    "session_id": "smoke-chat",
+    "question": "What platform helps with workflow management?",
+    "session_id": "cloud-chat-smoke",
     "top_k": 5
-  }' | python3 -m json.tool
+  }' | jq
 ```
+
+## Demo pública
+
+A URL pública do frontend deve ser compartilhada diretamente com os avaliadores no momento da entrega.
+
+Por segurança, ela não precisa ficar exposta no README do repositório.
+
+> A instância pública é um ambiente compartilhado de demonstração. Não envie documentos sensíveis, confidenciais, pessoais ou proprietários.
+
+Como testar:
+
+1. Acesse a URL do frontend fornecida na entrega.
+2. Opcionalmente, remova documentos de exemplo.
+3. Envie um arquivo `.txt`, `.pdf` ou `.docx`.
+4. Aguarde a indexação.
+5. Faça perguntas sobre o conteúdo enviado.
+6. Abra **Fontes recuperadas** para validar os trechos usados na resposta.
+7. Remova o documento após o teste, se desejar.
+
+Sugestões:
+
+```text
+Resuma os documentos indexados.
+```
+
+```text
+What are the main points of the uploaded document?
+```
+
+```text
+Who are the authors of the article?
+```
+
+```text
+According to the document, what problem does the article try to solve?
+```
+
+## LangSmith
+
+A API cloud pode enviar traces para o projeto:
+
+```text
+pipefy-rag-chat-cloud
+```
+
+Configuração:
+
+```env
+LANGSMITH_TRACING=true
+LANGSMITH_PROJECT=pipefy-rag-chat-cloud
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_API_KEY=<secret-manager:langsmith-api-key>
+```
+
+A chave é armazenada no Secret Manager e montada como variável de ambiente no serviço da API.
+
+Os traces ajudam a observar:
+
+* busca vetorial;
+* construção do prompt;
+* chamada ao LLM;
+* modelo usado;
+* fontes recuperadas;
+* latência da resposta.
 
 ## Custos e exposição pública
 
-A demo pública foi pensada para avaliação técnica temporária, não para produção.
+A demo cloud foi pensada para avaliação técnica temporária, não para produção.
 
 Medidas usadas para reduzir custo e risco:
 
-* `min-instances=0` para reduzir custo quando não houver uso.
-* `max-instances=1` na API com Ollama.
-* `max-instances=2` no frontend.
-* Documentos de demonstração sem dados sensíveis.
+* `min-instances=0` no frontend.
+* `min-instances=0` na API.
+* `min-instances=0` no serviço GPU.
+* `max-instances=1` no serviço GPU.
+* Modelo GPU privado, sem acesso público direto.
+* API pública apenas para permitir uso via frontend.
 * Budget alert configurado no projeto GCP.
-* Possibilidade de remover os serviços após avaliação.
-* LangSmith habilitado na API cloud para observabilidade dos traces de retrieval, prompt e chamadas do fluxo RAG.
+* Documentos de demonstração sem dados sensíveis.
 
-Como a API pública não possui autenticação por usuário, a URL da demo deve ser compartilhada apenas com os avaliadores e mantida ativa somente durante o período necessário.
+Pontos de atenção:
 
-## Limitações da demo cloud
-
-* A instância pública é compartilhada.
-* Não há autenticação por usuário.
-* Não há isolamento multi-tenant dos documentos.
-* O modelo cloud `gemma2:2b` é menor que o modelo local `llama3:8b`.
-* Perguntas ambíguas podem exigir formulação mais explícita.
-* PDFs escaneados não são suportados, pois OCR não foi implementado.
-* Arquivos muito grandes podem exigir ingestão assíncrona.
+* O Memorystore Redis continua gerando custo enquanto a instância existir.
+* O serviço GPU pode ter cold start alto.
+* A primeira chamada ao modelo pode demorar mais por carregamento do runtime/modelo.
+* A demo não possui autenticação por usuário.
 
 ## Troubleshooting
 
-### A API está fora do ar
+### API retorna HTML ou erro no `jq`
 
-Verifique o health check:
+Se `curl "$API_URL/health" | jq` falhar, veja o corpo real:
 
 ```bash
-curl -s "$OLLAMA_API_URL/health" | python3 -m json.tool
+curl -i "$API_URL/health"
 ```
 
-Se o Redis aparecer como `disconnected`, verifique as variáveis `REDIS_HOST` e `REDIS_PORT`.
+Possíveis causas:
 
-### Upload falha na versão cloud
+* API com ingress interno;
+* API sem `allUsers` como invoker;
+* URL incorreta;
+* serviço sem revisão ativa.
+
+### API não consegue chamar o Ollama GPU
+
+Verifique:
+
+* `OLLAMA_BASE_URL`;
+* `OLLAMA_AUTH_AUDIENCE`;
+* permissão `roles/run.invoker` no serviço GPU;
+* service account usada pela API;
+* logs da API;
+* logs do serviço GPU.
+
+### Ollama GPU retorna erro CUDA
+
+Verifique se as variáveis estão aplicadas:
+
+```env
+OLLAMA_LLM_LIBRARY=cuda_v13
+OLLAMA_FLASH_ATTENTION=false
+```
+
+Também verificar logs:
+
+```bash
+gcloud run services logs read pipefy-rag-ollama-gpu \
+  --region "$REGION" \
+  --limit=120
+```
+
+### Upload falha
 
 Possíveis causas:
 
 * arquivo vazio;
 * formato não suportado;
-* timeout em arquivo grande;
+* PDF escaneado sem texto extraível;
 * falha de conexão com Redis;
-* modelo de embeddings ausente na imagem.
+* timeout em arquivo grande.
 
-Na versão cloud, o modelo de embeddings deve estar disponível em:
-
-```text
-/models/sentence-transformers/all-MiniLM-L6-v2
-```
-
-### O chat responde, mas usa o documento errado
-
-Use perguntas mais explícitas com o nome do arquivo:
-
-```text
-Resuma o arquivo nome_do_arquivo.docx usando apenas as fontes recuperadas.
-```
-
-Também é possível validar a recuperação diretamente pelo endpoint:
-
-```bash
-curl -s -X POST "$OLLAMA_API_URL/chat/retrieve" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "question": "Resuma o arquivo nome_do_arquivo.docx.",
-    "session_id": "debug",
-    "top_k": 5
-  }' | python3 -m json.tool
-```
-
-### O modelo cloud demora para responder
-
-A versão cloud usa Cloud Run com `min-instances=0`, então pode haver cold start.
-
-O primeiro acesso após um período sem uso pode demorar mais porque a API e o sidecar Ollama precisam inicializar.
-
-### A resposta diz que não encontrou informação
+### Resposta não encontra informação
 
 Verifique:
 
-* se o documento foi realmente indexado;
-* se a pergunta menciona o nome correto do arquivo;
+* se o documento foi indexado;
 * se `/chat/retrieve` retorna chunks relevantes;
-* se o documento contém texto extraível.
-
-PDFs escaneados não são processados porque OCR não foi implementado.
+* se a pergunta cita o arquivo correto;
+* se o documento contém texto extraível;
+* se há documentos duplicados causando ruído no contexto.
 
 ## Teardown
 
-Após a avaliação, os serviços cloud podem ser removidos para evitar custos.
-
-Exemplo:
+Após a avaliação, os serviços podem ser removidos para evitar custos.
 
 ```bash
 gcloud run services delete pipefy-rag-frontend \
   --region "$REGION" \
   --quiet
 
-gcloud run services delete pipefy-rag-api-ollama \
+gcloud run services delete pipefy-rag-api \
   --region "$REGION" \
   --quiet
 
-gcloud run services delete pipefy-rag-api \
+gcloud run services delete pipefy-rag-ollama-gpu \
   --region "$REGION" \
   --quiet
 ```
 
-Também é possível remover recursos auxiliares, como repositórios do Artifact Registry e instâncias Redis gerenciadas, se eles não forem mais necessários.
+Opcionalmente, remover Redis:
+
+```bash
+gcloud redis instances delete pipefy-rag-redis \
+  --region "$REGION" \
+  --quiet
+```
+
+> Atenção: remover o Redis apaga os documentos, chunks e embeddings indexados.
